@@ -16,6 +16,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
+          cache-dependency-path: android-app/pubspec.yaml
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.35.7'

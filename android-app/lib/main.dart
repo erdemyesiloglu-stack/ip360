@@ -65,7 +65,7 @@ class _HomeState extends State<Home> {
   Set<String> _favorites = {};
   SourceConfig? _source;
   Channel? _selected;
-  bool _fullScreen = false, _epgBusy = false;
+  bool _fullScreen = false, _epgBusy = false, _rememberSource = false;
   LiveView _liveView = LiveView.list;
   Map<String, List<Programme>> _epg = {};
   String _epgUrl = '';
@@ -147,6 +147,7 @@ class _HomeState extends State<Home> {
       await _player.stop();
       if (!mounted) { return; }
       setState(() {
+        _rememberSource = config != null && (!writeStorage || remember);
         _items = items; _source = config; _selected = null; _fullScreen = false; _epg = {}; _epgUrl = ''; _epgBusy = false; _kind = 'live';
         if (!items.any((c) => c.kind == 'live')) { _kind = items.first.kind; }
         _category = ''; _query = ''; _search.clear(); _favoritesOnly = false;
@@ -155,7 +156,7 @@ class _HomeState extends State<Home> {
       if (writeStorage) {
         try {
           if (remember && config != null) { await _vault.write(key: 'source', value: jsonEncode(config.toJson())); }
-          else { await _vault.delete(key: 'source'); }
+          else { await _vault.delete(key: 'source'); await _vault.delete(key: 'epg'); }
         } catch (_) {
           if (mounted) { setState(() => _notice = 'Kaynak açıldı ancak cihazda kayıt güncellenemedi. Önceki kayıt korunmuş olabilir.'); }
         }
@@ -358,7 +359,7 @@ class _HomeState extends State<Home> {
       if (!mounted || request != _epgRequest) { return; }
       setState(() { _epg = data; _epgUrl = url; _now = DateTime.now();
         _notice = data.isEmpty ? 'XMLTV dosyasında geçerli program bulunamadı.' : 'Yayın rehberi yüklendi.'; });
-      if (_source != null) {
+      if (_source != null && _rememberSource) {
         await _vault.write(key: 'epg', value: jsonEncode({'source': _source!.url, 'url': url}));
       }
     } catch (_) {
