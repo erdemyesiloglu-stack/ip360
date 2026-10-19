@@ -145,11 +145,23 @@ class _HomeState extends State<Home> {
       final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['m3u', 'm3u8']);
       if (result == null || !mounted) { return; }
       final file = result.files.single;
-      if (file.size > maxPlaylistBytes) { throw const FormatException('Dosya çok büyük. En fazla 20 MB destekleniyor.'); }
-      final bytes = file.path != null ? await File(file.path!).readAsBytes() : file.bytes;
-      if (bytes == null) { throw const FormatException('Dosya okunamadı.'); }
-      if (!mounted) { return; }
-      await _load(null, local: parseM3u(utf8.decode(bytes, allowMalformed: true)), remember: false);
+      if (file.size > maxPlaylistBytes) { throw const FormatException('Dosya çok büyük. En fazla 100 MB destekleniyor.'); }
+      final Stream<List<int>> stream;
+      if (file.path != null) {
+        stream = File(file.path!).openRead();
+      } else if (file.bytes != null) {
+        stream = Stream.value(file.bytes!);
+      } else {
+        throw const FormatException('Dosya okunamadı.');
+      }
+      setState(() => _busy = true);
+      try {
+        final items = await parseM3uStream(stream);
+        if (!mounted) { return; }
+        await _load(null, local: items, remember: false);
+      } finally {
+        if (mounted) { setState(() => _busy = false); }
+      }
     } catch (error) { if (mounted) { setState(() => _notice = _safeError(error)); } }
   }
 

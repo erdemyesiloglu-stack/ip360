@@ -1,9 +1,48 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:iptv_app/source.dart';
 
 void main() {
+  test('Loads M3U larger than the old 20 MB limit without buffering the body', () async {
+    final padding = utf8.encode('#${'x' * 65534}\n');
+    Stream<List<int>> body() async* {
+      yield utf8.encode('#EXTM3U\n#EXTINF:-1 group-title="Haber",Kanal\n');
+      for (var i = 0; i < 321; i++) { yield padding; }
+      yield utf8.encode('https://example.com/live.m3u8\n');
+    }
+    final client = _StreamClient(body());
+    final channels = await SourceService(client).m3u('https://example.com/list.m3u');
+    expect(padding.length * 321, greaterThan(20 * 1024 * 1024));
+    expect(channels.single.name, 'Kanal');
+    expect(channels.single.group, 'Haber');
+    client.close();
+  });
+  test('Streaming parser retains UTF-8 and metadata across individual byte chunks', () async {
+    const text = '#EXTM3U\n#EXTINF:-1 group-title="Çocuk" tvg-logo="afiş.png",Çizgi\ncanli.m3u8\n';
+    final expected = parseM3u(text, base: Uri.parse('https://example.com/list.m3u'));
+    final channels = await parseM3uStream(Stream.fromIterable(utf8.encode(text).map((b) => [b])), base: Uri.parse('https://example.com/list.m3u'));
+    expect(channels.single.name, expected.single.name);
+    expect(channels.single.group, expected.single.group);
+    expect(channels.single.logo, expected.single.logo);
+    expect(channels.single.url, expected.single.url);
+  });
+  test('Counts actual streamed bytes even without a Content-Length header', () async {
+    var cancelled = false;
+    Stream<List<int>> body() async* {
+      try {
+        yield utf8.encode('#EXTM3U\n');
+        yield List.filled(32, 35);
+        yield utf8.encode('https://example.com/live');
+      } finally { cancelled = true; }
+    }
+    final client = _StreamClient(body());
+    await expectLater(SourceService(client, maxBytes: 16).m3u('https://example.com/list'), throwsFormatException);
+    expect(cancelled, isTrue);
+    client.close();
+  });
+
   test('M3U preserves quoted commas, artwork and relative paths', () {
     final list = parseM3u('\uFEFF#EXTM3U\r\n#EXTINF:-1 group-title="Haber, TV" tvg-logo="logo.png",Kanal, HD\r\nlive/a.m3u8', base: Uri.parse('https://example.com/list.m3u'));
     expect(list.single.name, 'Kanal, HD');
@@ -62,4 +101,11 @@ void main() {
     expect(categoryOf(const Channel('S Sport', 'https://example.com/a')), 'Spor');
     expect(inferKind('Filmler', 'https://example.com/movie/u/p/4.mp4'), 'movies');
   });
+}
+
+class _StreamClient extends http.BaseClient {
+  _StreamClient(this.body);
+  final Stream<List<int>> body;
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async => http.StreamedResponse(body, 200);
 }

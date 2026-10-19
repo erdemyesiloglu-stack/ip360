@@ -6,7 +6,7 @@ oluşturulur. Paket kimliği: `com.erdemyesiloglu.ip360`.
 
 ## Özellikler
 
-- HTTP / HTTPS M3U bağlantısı ve M3U dosyası
+- HTTP / HTTPS M3U bağlantısı ve M3U dosyası (100 MB sınır, satır satır okuma)
 - Xtream canlı kanallar, filmler, diziler ve sezon/bölüm seçimi
 - Açılır kategoriler, tam sayfa logo/afiş kataloğu, arama ve favoriler
 - Doğrudan video oynatma; aracı sunucu veya tarayıcı WebView kullanılmaz

@@ -1,7 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
-const maxPlaylistBytes = 20 * 1024 * 1024;
+const maxPlaylistBytes = 100 * 1024 * 1024;
 
 class SourceConfig {
   const SourceConfig({required this.type, required this.url, this.username = '', this.password = ''});
@@ -71,14 +72,33 @@ List<String> categoriesFor(List<Channel> channels, String kind) {
 }
 
 List<Channel> parseM3u(String text, {Uri? base}) {
-  if (RegExp(r'^#EXT-X-(TARGETDURATION|STREAM-INF|MEDIA-SEQUENCE):', multiLine: true).hasMatch(text)) {
-    if (base == null) { throw const FormatException('HLS dosyası yerine yayın bağlantısını ekleyin.'); }
-    return [Channel('HLS yayını', base.toString())];
+  final parser = _M3uParser(base);
+  for (final line in LineSplitter.split(text)) {
+    parser.add(line);
   }
+  return parser.finish();
+}
+
+Future<List<Channel>> parseM3uStream(Stream<List<int>> bytes, {Uri? base}) async {
+  final parser = _M3uParser(base);
+  await for (final line in bytes.transform(const Utf8Decoder(allowMalformed: true)).transform(const LineSplitter())) {
+    parser.add(line);
+  }
+  return parser.finish();
+}
+
+class _M3uParser {
+  _M3uParser(this.base);
+  final Uri? base;
   final channels = <Channel>[];
   var name = '', group = 'Diğer', logo = '';
-  for (final raw in const LineSplitter().convert(text.replaceFirst('\uFEFF', ''))) {
-    final line = raw.trim();
+  var hls = false;
+  void add(String raw) {
+    final line = raw.replaceFirst('\uFEFF', '').trim();
+    if (RegExp(r'^#EXT-X-(TARGETDURATION|STREAM-INF|MEDIA-SEQUENCE):').hasMatch(line)) {
+      hls = true;
+    }
+    if (hls) { return; }
     if (line.startsWith('#EXTINF:')) {
       group = RegExp(r'group-title="([^"]*)"').firstMatch(line)?.group(1) ?? 'Diğer';
       logo = safeLogo(RegExp(r'tvg-logo="([^"]*)"').firstMatch(line)?.group(1), base);
@@ -97,32 +117,46 @@ List<Channel> parseM3u(String text, {Uri? base}) {
       name = ''; group = 'Diğer'; logo = '';
     }
   }
-  if (channels.isEmpty) { throw const FormatException('Listede oynatılabilir HTTP/HTTPS yayını bulunamadı.'); }
-  return channels;
+  List<Channel> finish() {
+    if (hls) {
+      if (base == null) { throw const FormatException('HLS dosyası yerine yayın bağlantısını ekleyin.'); }
+      return [Channel('HLS yayını', base.toString())];
+    }
+    if (channels.isEmpty) { throw const FormatException('Listede oynatılabilir HTTP/HTTPS yayını bulunamadı.'); }
+    return channels;
+  }
 }
 
 class SourceService {
-  SourceService(this.client);
+  SourceService(this.client, {this.maxBytes = maxPlaylistBytes});
+  final int maxBytes;
   final http.Client client;
   final warnings = <String>[];
 
-  Future<String> _get(Uri uri) async {
+  Stream<List<int>> _download(Uri uri) async* {
     final response = await client.send(http.Request('GET', uri)).timeout(const Duration(seconds: 25));
     if (response.statusCode != 200) {
-      await response.stream.drain<void>();
+      await response.stream.listen(null).cancel();
       throw const FormatException('Sağlayıcı isteği reddetti. Adresi ve hesap bilgilerini kontrol edin.');
     }
-    final bytes = <int>[];
-    await for (final chunk in response.stream.timeout(const Duration(seconds: 25))) {
-      if (bytes.length + chunk.length > maxPlaylistBytes) { throw const FormatException('Liste çok büyük. En fazla 20 MB destekleniyor.'); }
-      bytes.addAll(chunk);
+    var received = 0;
+    await for (final chunk in response.stream.timeout(const Duration(seconds: 60))) {
+      received += chunk.length;
+      if (received > maxBytes) { throw const FormatException('Liste cihaz kapasitesi sınırını aşıyor (100 MB). Sağlayıcıdan daha küçük liste veya Xtream bilgilerini isteyin.'); }
+      yield chunk;
     }
-    return utf8.decode(bytes, allowMalformed: true);
+  }
+  Future<String> _get(Uri uri) async {
+    final bytes = BytesBuilder(copy: false);
+    await for (final chunk in _download(uri)) {
+      bytes.add(chunk);
+    }
+    return utf8.decode(bytes.takeBytes(), allowMalformed: true);
   }
 
   Future<List<Channel>> m3u(String url) async {
     final uri = serverUri(url);
-    return parseM3u(await _get(uri), base: uri);
+    return parseM3uStream(_download(uri), base: uri);
   }
   Uri _root(SourceConfig config) {
     final base = serverUri(config.url);
