@@ -65,7 +65,7 @@ class _HomeState extends State<Home> {
   void initState() {
     super.initState();
     _errors = _player.stream.error.listen((_) {
-      if (mounted) setState(() => _notice = 'Yayın açılamadı. Sağlayıcı erişimini ve bağlantınızı kontrol edin.');
+      if (mounted) { setState(() => _notice = 'Yayın açılamadı. Sağlayıcı erişimini ve bağlantınızı kontrol edin.'); }
     });
     _restore();
   }
@@ -79,15 +79,15 @@ class _HomeState extends State<Home> {
     setState(() => _busy = true);
     try {
       final stored = await Future.wait([_vault.read(key: 'source'), _vault.read(key: 'favorites')]);
-      if (!mounted) return;
-      if (stored[1] != null) _favorites = (jsonDecode(stored[1]!) as List).whereType<String>().toSet();
+      if (!mounted) { return; }
+      if (stored[1] != null) { _favorites = (jsonDecode(stored[1]!) as List).whereType<String>().toSet(); }
       if (stored[0] != null) {
         final config = SourceConfig.fromJson(Map<String, dynamic>.from(jsonDecode(stored[0]!) as Map));
         await _load(config, writeStorage: false);
       }
     } catch (_) {
-      if (mounted) setState(() => _notice = 'Cihazdaki kaynak kaydı okunamadı. Kaynağı yeniden ekleyebilirsiniz.');
-    } finally { if (mounted) setState(() => _busy = false); }
+      if (mounted) { setState(() => _notice = 'Cihazdaki kaynak kaydı okunamadı. Kaynağı yeniden ekleyebilirsiniz.'); }
+    } finally { if (mounted) { setState(() => _busy = false); } }
   }
 
   void _indexCategories() {
@@ -102,9 +102,9 @@ class _HomeState extends State<Home> {
   }
 
   String _safeError(Object error) {
-    if (error is FormatException) return error.message;
-    if (error is HandshakeException) return 'HTTPS sertifikası doğrulanamadı. Sağlayıcının geçerli sunucu adresini kullanın.';
-    if (error is TimeoutException) return 'Sağlayıcı yanıtı zaman aşımına uğradı. Yeniden deneyin.';
+    if (error is FormatException) { return error.message; }
+    if (error is HandshakeException) { return 'HTTPS sertifikası doğrulanamadı. Sağlayıcının geçerli sunucu adresini kullanın.'; }
+    if (error is TimeoutException) { return 'Sağlayıcı yanıtı zaman aşımına uğradı. Yeniden deneyin.'; }
     return 'Kaynak yüklenemedi. Sunucu adresini, bağlantınızı ve hesap bilgilerini kontrol edin.';
   }
 
@@ -116,14 +116,14 @@ class _HomeState extends State<Home> {
       if (local != null) {
         items = local;
       } else {
-        if (config == null) throw const FormatException('Önce bir kaynak ekleyin.');
+        if (config == null) { throw const FormatException('Önce bir kaynak ekleyin.'); }
         items = await (config.type == 'xtream' ? service.xtream(config) : service.m3u(config.url));
       }
       await _player.stop();
-      if (!mounted) return;
+      if (!mounted) { return; }
       setState(() {
         _items = items; _source = config; _selected = null; _kind = 'live';
-        if (!items.any((c) => c.kind == 'live')) _kind = items.first.kind;
+        if (!items.any((c) => c.kind == 'live')) { _kind = items.first.kind; }
         _category = ''; _query = ''; _search.clear(); _favoritesOnly = false;
         _indexCategories(); _notice = service.warnings.isEmpty ? null : service.warnings.join(' ');
       });
@@ -132,25 +132,25 @@ class _HomeState extends State<Home> {
           if (remember && config != null) { await _vault.write(key: 'source', value: jsonEncode(config.toJson())); }
           else { await _vault.delete(key: 'source'); }
         } catch (_) {
-          if (mounted) setState(() => _notice = 'Kaynak açıldı ancak cihazda kayıt güncellenemedi. Önceki kayıt korunmuş olabilir.');
+          if (mounted) { setState(() => _notice = 'Kaynak açıldı ancak cihazda kayıt güncellenemedi. Önceki kayıt korunmuş olabilir.'); }
         }
       }
     } catch (error) {
-      if (mounted) setState(() => _notice = _safeError(error));
-    } finally { if (mounted) setState(() => _busy = false); }
+      if (mounted) { setState(() => _notice = _safeError(error)); }
+    } finally { if (mounted) { setState(() => _busy = false); } }
   }
 
   Future<void> _pickFile() async {
     try {
       final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['m3u', 'm3u8']);
-      if (result == null || !mounted) return;
+      if (result == null || !mounted) { return; }
       final file = result.files.single;
-      if (file.size > maxPlaylistBytes) throw const FormatException('Dosya çok büyük. En fazla 20 MB destekleniyor.');
+      if (file.size > maxPlaylistBytes) { throw const FormatException('Dosya çok büyük. En fazla 20 MB destekleniyor.'); }
       final bytes = file.path != null ? await File(file.path!).readAsBytes() : file.bytes;
-      if (bytes == null) throw const FormatException('Dosya okunamadı.');
-      if (!mounted) return;
+      if (bytes == null) { throw const FormatException('Dosya okunamadı.'); }
+      if (!mounted) { return; }
       await _load(null, local: parseM3u(utf8.decode(bytes, allowMalformed: true)), remember: false);
-    } catch (error) { if (mounted) setState(() => _notice = _safeError(error)); }
+    } catch (error) { if (mounted) { setState(() => _notice = _safeError(error)); } }
   }
 
   Future<void> _addSource() async {
@@ -191,7 +191,7 @@ class _HomeState extends State<Home> {
           FilledButton(onPressed: () {
             try {
               serverUri(url.text);
-              if (xtream && (user.text.trim().isEmpty || password.text.isEmpty)) throw const FormatException('Kullanıcı adı ve şifre gerekli.');
+              if (xtream && (user.text.trim().isEmpty || password.text.isEmpty)) { throw const FormatException('Kullanıcı adı ve şifre gerekli.'); }
               Navigator.pop(context, _SourceInput(config: SourceConfig(type: xtream ? 'xtream' : 'm3u',
                 url: url.text.trim(), username: user.text.trim(), password: password.text), remember: remember));
             } catch (e) { change(() => error = _safeError(e)); }
@@ -199,7 +199,7 @@ class _HomeState extends State<Home> {
       ),
     ));
     url.dispose(); user.dispose(); password.dispose();
-    if (!mounted || input == null) return;
+    if (!mounted || input == null) { return; }
     if (input.file) { await _pickFile(); }
     else { await _load(input.config, remember: input.remember); }
   }
@@ -207,15 +207,15 @@ class _HomeState extends State<Home> {
   Future<void> _removeSource() async {
     try {
       await _vault.delete(key: 'source'); await _player.stop();
-      if (!mounted) return;
+      if (!mounted) { return; }
       setState(() { _source = null; _items = []; _selected = null; _category = ''; _query = ''; _search.clear(); _indexCategories(); _notice = 'Kaynak kaydı silindi.'; });
-    } catch (_) { if (mounted) setState(() => _notice = 'Kaynak kaydı silinemedi. Yeniden deneyin.'); }
+    } catch (_) { if (mounted) { setState(() => _notice = 'Kaynak kaydı silinemedi. Yeniden deneyin.'); } }
   }
 
   Future<void> _toggleFavorite(Channel channel) async {
-    setState(() { if (!_favorites.add(channel.key)) _favorites.remove(channel.key); });
+    setState(() { if (!_favorites.add(channel.key)) { _favorites.remove(channel.key); } });
     try { await _vault.write(key: 'favorites', value: jsonEncode(_favorites.toList())); }
-    catch (_) { if (mounted) setState(() => _notice = 'Favori bu oturumda güncellendi ancak kalıcı kaydedilemedi.'); }
+    catch (_) { if (mounted) { setState(() => _notice = 'Favori bu oturumda güncellendi ancak kalıcı kaydedilemedi.'); } }
   }
 
   Future<void> _select(Channel channel) async {
@@ -223,7 +223,7 @@ class _HomeState extends State<Home> {
       setState(() => _busy = true);
       try {
         final episodes = await SourceService(_client).episodes(_source!, channel);
-        if (!mounted) return;
+        if (!mounted) { return; }
         final selected = await showDialog<Channel>(context: context, builder: (context) => AlertDialog(
           title: Text(channel.name), content: SizedBox(width: 600, height: 440,
             child: ListView.builder(itemCount: episodes.length, itemBuilder: (context, index) {
@@ -233,19 +233,19 @@ class _HomeState extends State<Home> {
             })),
           actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Kapat'))],
         ));
-        if (selected != null && mounted) await _play(selected);
-      } catch (error) { if (mounted) setState(() => _notice = _safeError(error)); }
-      finally { if (mounted) setState(() => _busy = false); }
+        if (selected != null && mounted) { await _play(selected); }
+      } catch (error) { if (mounted) { setState(() => _notice = _safeError(error)); } }
+      finally { if (mounted) { setState(() => _busy = false); } }
     } else { await _play(channel); }
   }
   Future<void> _play(Channel channel) async {
     setState(() { _selected = channel; _notice = null; });
     try { await _player.open(Media(channel.url)); }
-    catch (_) { if (mounted) setState(() => _notice = 'Yayın başlatılamadı. Bağlantıyı kontrol edin.'); }
+    catch (_) { if (mounted) { setState(() => _notice = 'Yayın başlatılamadı. Bağlantıyı kontrol edin.'); } }
   }
   Future<void> _backToCatalog() async {
     await _player.stop();
-    if (mounted) setState(() => _selected = null);
+    if (mounted) { setState(() => _selected = null); }
   }
   void _filter(String kind, String category) {
     setState(() { _kind = kind; _category = category; _query = ''; _search.clear(); _favoritesOnly = false; });
@@ -285,14 +285,14 @@ class _HomeState extends State<Home> {
   @override
   Widget build(BuildContext context) {
     if (_selected != null) {
-      return PopScope(canPop: false, onPopInvokedWithResult: (didPop, _) { if (!didPop) _backToCatalog(); },
+      return PopScope(canPop: false, onPopInvokedWithResult: (didPop, _) { if (!didPop) { _backToCatalog(); } },
         child: Shortcuts(shortcuts: const {
           SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
           SingleActivator(LogicalKeyboardKey.mediaPlayPause): ActivateIntent(),
         }, child: Actions(actions: {ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) { _player.playOrPause(); return null; })},
           child: Scaffold(appBar: AppBar(leading: IconButton(autofocus: true, tooltip: 'Kataloğa dön', onPressed: _backToCatalog, icon: const Icon(Icons.arrow_back)),
             title: Text(_selected!.name, overflow: TextOverflow.ellipsis), actions: [
-              IconButton(tooltip: 'Oynat / duraklat', onPressed: () => _player.playOrPause(), icon: const Icon(Icons.play_pause)),
+              IconButton(tooltip: 'Oynat / duraklat', onPressed: () => _player.playOrPause(), icon: const Icon(Icons.pause_circle_outline)),
               IconButton(tooltip: 'Yeniden dene', onPressed: () => _play(_selected!), icon: const Icon(Icons.refresh)),
             ]), body: Column(children: [_noticeWidget(), Expanded(child: ColoredBox(color: Colors.black, child: Video(controller: _video)))])),
         )));

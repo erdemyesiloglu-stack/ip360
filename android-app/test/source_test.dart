@@ -22,11 +22,11 @@ void main() {
       expect(request.url.port, 8000);
       expect(request.url.queryParameters['password'], 'p&ss');
       final action = request.url.queryParameters['action'];
-      if (action == null) return http.Response('{"user_info":{"auth":1}}', 200);
-      if (action.endsWith('categories')) return http.Response('[{"category_id":"7","category_name":"Haber"}]', 200);
-      if (action == 'get_live_streams') return http.Response('[{"stream_id":42,"name":"Kanal","category_id":"7"}]', 200);
-      if (action == 'get_vod_streams') return http.Response('[{"stream_id":43,"name":"Film","category_id":"7","container_extension":"mp4"}]', 200);
-      if (action == 'get_series') return http.Response('[{"series_id":44,"name":"Dizi","category_id":"7"}]', 200);
+      if (action == null) { return http.Response('{"user_info":{"auth":1}}', 200); }
+      if (action.endsWith('categories')) { return http.Response('[{"category_id":"7","category_name":"Haber"}]', 200); }
+      if (action == 'get_live_streams') { return http.Response('[{"stream_id":42,"name":"Kanal","category_id":"7"}]', 200); }
+      if (action == 'get_vod_streams') { return http.Response('[{"stream_id":43,"name":"Film","category_id":"7","container_extension":"mp4"}]', 200); }
+      if (action == 'get_series') { return http.Response('[{"series_id":44,"name":"Dizi","category_id":"7"}]', 200); }
       return http.Response('[]', 200);
     });
     final channels = await SourceService(client).xtream(const SourceConfig(type: 'xtream', url: 'https://example.com:8000', username: 'a b', password: 'p&ss'));
