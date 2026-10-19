@@ -36,6 +36,10 @@ void main() {
       expect(tester.getSize(find.byKey(const Key('video'))), size);
       expect(find.text('Maç sonrası'), findsOneWidget);
       expect(find.text('13 dk kaldı'), findsOneWidget);
+      if (size.width == 800) {
+        expect(find.text('Maç sonrası').hitTestable(), findsOneWidget);
+        expect(find.byTooltip('Duraklat').hitTestable(), findsOneWidget);
+      }
       expect(find.text('02:00 – 03:00  Spor haberleri'), findsOneWidget);
       expect(find.byKey(const Key('vod-seek')), findsNothing);
       expect(find.byKey(const Key('programme-progress')), findsOneWidget);

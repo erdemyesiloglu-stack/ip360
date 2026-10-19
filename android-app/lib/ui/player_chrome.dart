@@ -82,7 +82,7 @@ class _PlayerChromeState extends State<PlayerChrome> {
           child: SafeArea(child: LayoutBuilder(builder: (context, box) => Column(children: [
             _header(box.maxWidth), const Spacer(),
             ConstrainedBox(constraints: BoxConstraints(maxHeight: box.maxHeight > 90 ? box.maxHeight - 84 : box.maxHeight),
-              child: _panel(box.maxWidth)),
+              child: _panel(box.maxWidth, box.maxHeight)),
           ]))))),
       ]))));
 
@@ -95,8 +95,9 @@ class _PlayerChromeState extends State<PlayerChrome> {
       Text(playbackDate(widget.now), style: TextStyle(fontSize: width < 600 ? 12 : 18, color: Colors.white70)),
     ])));
 
-  Widget _panel(double width) {
-    final compact = width < 600;
+  Widget _panel(double width, double height) {
+    final dense = width >= 600 && height < 480;
+    final compact = width < 600 || dense;
     final current = currentProgramme(widget.programmes, widget.now);
     final next = widget.programmes.where((p) => p.start.isAfter(widget.now)).firstOrNull;
     final live = widget.channel.kind == 'live';
@@ -104,7 +105,7 @@ class _PlayerChromeState extends State<PlayerChrome> {
       height: widget.state.height ?? widget.state.videoParams.h, fps: widget.fps, audioChannels: widget.state.audioParams.channelCount);
     return DecoratedBox(decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter,
       end: Alignment.bottomCenter, colors: [Color(0x00000000), Color(0xE6000000), Color(0xF5000000)], stops: [0, .2, 1])),
-      child: SingleChildScrollView(child: Padding(padding: EdgeInsets.fromLTRB(compact ? 16 : 36, 30, compact ? 16 : 36, 10),
+      child: SingleChildScrollView(child: Padding(padding: EdgeInsets.fromLTRB(compact ? 16 : 36, dense ? 8 : 30, compact ? 16 : 36, dense ? 4 : 10),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           if (widget.notice != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(widget.notice!, style: const TextStyle(color: Colors.orangeAccent))),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -114,7 +115,7 @@ class _PlayerChromeState extends State<PlayerChrome> {
             const SizedBox(width: 18), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(widget.channel.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 13)),
               const SizedBox(height: 5), Text(live ? current?.title ?? 'Program bilgisi yok' : widget.channel.name,
-                maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: compact ? 21 : 30, fontWeight: FontWeight.w600)),
+                maxLines: dense ? 1 : 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: compact ? 21 : 30, fontWeight: FontWeight.w600)),
               if (live && current != null) Padding(padding: const EdgeInsets.only(top: 8), child: Wrap(spacing: 16, runSpacing: 4, children: [
                 Text('${programmeTime(current.start)} – ${programmeTime(current.end)}', style: const TextStyle(color: Colors.white70)),
                 Text('${(current.end.difference(widget.now).inSeconds / 60).ceil()} dk kaldı', style: const TextStyle(color: Colors.white70)),
@@ -125,28 +126,35 @@ class _PlayerChromeState extends State<PlayerChrome> {
             ])),
             if (widget.channelNumber != null) Padding(padding: const EdgeInsets.only(left: 12), child: Text('${widget.channelNumber}',
               style: TextStyle(color: Colors.white60, fontSize: compact ? 18 : 28))),
-          ]), const SizedBox(height: 12),
+          ]), SizedBox(height: dense ? 6 : 12),
           if (badges.isNotEmpty) Wrap(spacing: 6, runSpacing: 6, children: [for (final badge in badges)
             DecoratedBox(decoration: BoxDecoration(color: const Color(0xDD45515B), borderRadius: BorderRadius.circular(3)),
               child: Padding(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3), child: Text(badge, style: const TextStyle(fontSize: 11))))]),
-          const SizedBox(height: 14),
+          SizedBox(height: dense ? 6 : 14),
           if (live) ...[
             Row(children: [const Icon(Icons.circle, size: 8, color: Colors.redAccent), const SizedBox(width: 6),
               const Text('CANLI', style: TextStyle(fontSize: 10, letterSpacing: 1.2)), const Spacer(),
-              if (current != null) const Text('Program ilerlemesi', style: TextStyle(color: Colors.white38, fontSize: 10))]),
-            const SizedBox(height: 8),
+              if (current != null && !dense) const Text('Program ilerlemesi', style: TextStyle(color: Colors.white38, fontSize: 10))]),
+            SizedBox(height: dense ? 4 : 8),
             if (current != null) LinearProgressIndicator(key: const Key('programme-progress'), minHeight: 3, color: const Color(0xFF2196F3), backgroundColor: Colors.white24,
               value: (widget.now.difference(current.start).inSeconds / current.end.difference(current.start).inSeconds).clamp(0.0, 1.0)),
           ] else _seekBar(),
-          const SizedBox(height: 14),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          SizedBox(height: dense ? 6 : 14),
+          if (!dense) Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             if (widget.onPrevious != null) IconButton(tooltip: 'Önceki kanal', onPressed: () => _interact(widget.onPrevious!), icon: const Icon(Icons.skip_previous)),
             IconButton(focusNode: _playFocus, autofocus: true, tooltip: widget.state.playing ? 'Duraklat' : 'Oynat',
               onPressed: () => _interact(widget.onPlayPause), iconSize: 38, icon: Icon(widget.state.playing ? Icons.pause_circle_outline : Icons.play_circle_outline)),
             if (widget.onNext != null) IconButton(tooltip: 'Sonraki kanal', onPressed: () => _interact(widget.onNext!), icon: const Icon(Icons.skip_next)),
             IconButton(tooltip: 'Paneli gizle', onPressed: () => _setVisible(false), icon: const Icon(Icons.keyboard_arrow_down)),
-          ]), const SizedBox(height: 8),
-          SizedBox(height: compact ? 84 : 108, child: ListView(scrollDirection: Axis.horizontal, children: [
+          ]), if (!dense) const SizedBox(height: 8),
+          SizedBox(height: dense ? 64 : compact ? 84 : 108, child: ListView(scrollDirection: Axis.horizontal, children: [
+            if (dense) Row(mainAxisSize: MainAxisSize.min, children: [
+              if (widget.onPrevious != null) IconButton(tooltip: 'Önceki kanal', onPressed: () => _interact(widget.onPrevious!), icon: const Icon(Icons.skip_previous)),
+              IconButton(focusNode: _playFocus, autofocus: true, tooltip: widget.state.playing ? 'Duraklat' : 'Oynat',
+                onPressed: () => _interact(widget.onPlayPause), iconSize: 36, icon: Icon(widget.state.playing ? Icons.pause_circle_outline : Icons.play_circle_outline)),
+              if (widget.onNext != null) IconButton(tooltip: 'Sonraki kanal', onPressed: () => _interact(widget.onNext!), icon: const Icon(Icons.skip_next)),
+              IconButton(tooltip: 'Paneli gizle', onPressed: () => _setVisible(false), icon: const Icon(Icons.keyboard_arrow_down)),
+            ]),
             if (widget.onGuide != null) _action(Icons.view_list, 'TV rehberi', widget.onGuide!, compact),
             _action(Icons.history, 'Son izlenenler', widget.onHistory, compact),
             _action(widget.favorite ? Icons.star : Icons.star_outline, widget.favorite ? 'Favoriden çıkar' : 'Favoriye ekle', widget.onFavorite, compact),
