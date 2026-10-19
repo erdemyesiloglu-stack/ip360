@@ -46,8 +46,8 @@ sağlayıcıdan gelir; uygulama görsel veritabanı veya içerik sağlamaz.
 
 HTTPS sayfada HTTPS yayın adresi gerekir. Sağlayıcının API, listeler, HLS manifestleri
 ve yayın parçalarında CORS erişimine izin vermesi gerekir. DRM, özel istek başlıkları,
-ham TS ve bazı ses/video kodekleri desteklenmeyebilir. Aracı sunucu veya yayın
-dönüştürme yoktur; bağlantılar doğrudan cihazınızdan sağlayıcıya gider.
+ham TS ve bazı ses/video kodekleri desteklenmeyebilir. Varsayılan bağlantılar doğrudan cihazınızdan sağlayıcıya gider. Xtream için
+isteğe bağlı HTTP aracı bağlantısı aşağıda açıklanmıştır; yayın dönüştürme yoktur.
 
 “Kaynağı bu cihazda hatırla” açıksa son kaynak IndexedDB'de AES-GCM ile şifreli
 saklanır. Anahtar da aynı tarayıcıdadır; bu, aynı tarayıcıya erişen kişilere karşı
@@ -59,8 +59,8 @@ web sitesinde kaynağı bir kez yeniden ekleyin.
 
 Service worker yalnızca uygulama dosyalarını önbelleğe alır. Yayınlar internet
 gerektirir. HLS.js gerektiğinde jsDelivr'dan yüklenir; CDN erişimi gerekir.
-Sağlayıcı IP adresinizi ve hesap/yayın isteklerini görebilir. Uygulama bunları
-bir uygulama sunucusunda saklamaz ve kullanımın gizliliğini garanti etmez.
+Sağlayıcı IP adresinizi ve hesap/yayın isteklerini görebilir. Aracı bağlantı kapalıyken uygulama bunları
+bir uygulama sunucusunda işlemez; aracı açıkken hesaplar geçici işlenir ve şifreli oturum çerezi kullanılır. Uygulama hesapları sunucu veritabanında saklamaz ve kullanımın gizliliğini garanti etmez.
 
 ## Geliştirme ve doğrulama
 
@@ -71,6 +71,39 @@ dosyalarını kontrol eder. Harici npm bağımlılığı veya frontend derleyici
 Yerel önizleme için Python 3 kuruluysa `npm start` ve `http://localhost:4173`.
 `npm run standalone` kurulum gerektirmeyen `akis-iptv.html` dosyasını üretir.
 
-19 parser, kategori, ağ okuma ve şifreleme testi geçti. Gerçek sağlayıcı hesabı
+26 parser, kategori, ağ okuma, şifreleme ve aracı bağlantı testi geçti (aracı testleri sahte sağlayıcı yanıtları kullanır). Gerçek sağlayıcı hesabı
 ile oynatma ve gerçek Android/Windows tarayıcı testleri ayrıca yapılmalıdır.
 Bu depoya yüklenmiş olması, Pages projesinin henüz yayınlandığı anlamına gelmez.
+
+
+## HTTP Xtream bağlantısı (trsmart.net)
+
+HTTPS sayfa HTTP sağlayıcıya doğrudan bağlanamaz. Bu depo, yalnızca
+`trsmart.net` için bir HTTPS aracı içerir. Genel amaçlı URL proxy'si değildir.
+
+**Cloudflare'da bir kez etkinleştirme:**
+
+1. Pages projesi `ip360` → Settings → Variables and Secrets → Add.
+2. Production ortamına **Secret** türünde `IPTV_SESSION_SECRET` ekleyin.
+3. Değerini parola yöneticisiyle üretilmiş en az 32 rastgele karakter olarak belirleyin.
+   Bu değeri GitHub'a veya sohbet mesajına koymayın.
+4. Kaydedip yeni deployment başlatın / son deployment'ı yeniden deneyin.
+5. Uygulamadaki Xtream formunda **HTTP sunucu için aracı bağlantıyı kullan**
+   kutusunu işaretleyip kaynağı yükleyin.
+
+Hesap bilgileri uygulamaya HTTPS POST ile gelir. Sağlayıcı kimliği doğrulandıktan
+sonra iki saatlik, AES-GCM şifreli `HttpOnly; Secure; SameSite=Strict` oturum
+çerezi oluşturulur. Yayın adresleri şifreli ve oturuma bağlı belirteçlerle
+sunulur; kullanıcı adı/şifre aracı medya adresine açık yazılmaz. Manifestler,
+HLS parçaları ve anahtar adresleri aracı üzerinden taşınır. API/medya yanıtları
+önbelleğe alınmaz; sunucuda hesap veritabanı veya uygulama günlük kaydı tutulmaz.
+Cloudflare'ın altyapı ve hesap seviyesinde yapılandırılan günlükleme politikaları
+ayrıca geçerlidir. Normal yerel kaynak kaydı yine kullanıcının isteğine bağlıdır.
+
+**Sınırlar:** Cloudflare ile HTTP sağlayıcı arasındaki bağlantı şifreli değildir.
+Sağlayıcı Cloudflare çıkışını reddedebilir; bu durumda aracı çalışmayabilir.
+Başka CDN alan adına yönlenen yayınlar güvenlik için reddedilir. Başka sağlayıcılar,
+HTTP M3U dosyası aktarımı, DRM ve kodek dönüştürme bu aracıya dahil değildir.
+Oturum bittiğinde kaynağı yeniden yüklemek gerekir. Gerçek sağlayıcı hesabıyla
+uçtan uca oynatma henüz doğrulanmadı. Sunucu sırrı eklenene kadar uç noktalar
+503 döndürür; mevcut doğrudan HTTPS bağlantıları çalışmaya devam eder.

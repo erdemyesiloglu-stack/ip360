@@ -72,11 +72,42 @@ export async function readRemote(url, json = false, fetcher = fetch) {
   return json ? JSON.parse(text) : text;
 }
 
-export async function loadXtream(server, username, password, reader = readRemote) {
+export async function loadXtream(server, username, password, reader = readRemote, options = {}) {
   const root = webUrl(server);
   root.search = ''; root.hash = '';
   if (!root.pathname.endsWith('/')) root.pathname += '/';
   if (!username || !password) throw new Error('Kullanıcı adı ve şifre gerekli.');
+  if (options.relay && root.protocol === 'http:') {
+    const origin = globalThis.location?.origin || options.origin;
+    if (!origin?.startsWith('https://')) throw new Error('Aracı bağlantı yalnızca canlı HTTPS sitede kullanılabilir.');
+    const fetcher = options.fetcher || fetch;
+    const call = async (path, body) => {
+      const response = await fetcher(`${origin}/api/iptv/${path}`, {
+        method: body ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
+        referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(30000),
+        ...(body ? {headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {}),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        if (result.code === 'RELAY_NOT_CONFIGURED') throw new Error('HTTP bağlantı desteği için sunucu yapılandırması tamamlanmalı.');
+        throw new Error('Aracı bağlantı kurulamadı. Sunucu adresini ve hesap bilgilerini kontrol edin.');
+      }
+      return result;
+    };
+    await call('open', {server: root.origin, username, password});
+    const categories = await call('api?action=get_live_categories');
+    const streams = await call('api?action=get_live_streams');
+    if (!Array.isArray(categories) || !Array.isArray(streams)) throw new Error('Kanal listesi alınamadı.');
+    const names = new Map(categories.map(c => [String(c.category_id), String(c.category_name || 'Diğer')]));
+    const channels = streams.filter(c => /^\d+$/.test(String(c.stream_id)) && c.relay_url).map(c => ({
+      kind: 'live', hls: true, name: String(c.name || 'Kanal'), group: names.get(String(c.category_id)) || 'Diğer',
+      url: webUrl(c.relay_url).href,
+      favoriteKey: new URL(`live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${c.stream_id}.m3u8`, root).href,
+      ...(artworkUrl(c.stream_icon) ? {logo: artworkUrl(c.stream_icon)} : {}),
+    }));
+    if (!channels.length) throw new Error('Hesapta canlı kanal bulunamadı.');
+    return channels;
+  }
   const api = (action) => {
     const url = new URL('player_api.php', root);
     url.search = new URLSearchParams({username, password, ...(action ? {action} : {})});

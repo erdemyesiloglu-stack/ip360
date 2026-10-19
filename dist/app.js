@@ -29,6 +29,9 @@ function friendlyError(error) {
     'Xtream hesabı doğrulanamadı.', 'Kanal listesi alınamadı.', 'Hesapta canlı kanal bulunamadı.',
     'Önce bir M3U dosyası seçin.', 'M3U veya M3U8 dosyası seçin.',
     'HLS dosyası yerine yayının HTTPS bağlantısını ekleyin.',
+    'HTTP bağlantı desteği için sunucu yapılandırması tamamlanmalı.',
+    'Aracı bağlantı yalnızca canlı HTTPS sitede kullanılabilir.',
+    'Aracı bağlantı kurulamadı. Sunucu adresini ve hesap bilgilerini kontrol edin.',
   ];
   return allowed.includes(error.message) ? error.message : 'Kaynak yüklenemedi. Adresi, bağlantını ve sağlayıcının HTTPS/CORS desteğini kontrol et.';
 }
@@ -55,7 +58,7 @@ async function identify(channels) {
   // Bound simultaneous crypto jobs for large provider lists.
   for (let i = 0; i < channels.length; i += 250) {
     identified.push(...await Promise.all(channels.slice(i, i + 250).map(async c => ({...c,
-      id: [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(c.url)))].map(b => b.toString(16).padStart(2, '0')).join(''),
+      id: [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(c.favoriteKey || c.url)))].map(b => b.toString(16).padStart(2, '0')).join(''),
     }))));
   }
   return identified;
@@ -100,8 +103,8 @@ $('source-form').addEventListener('submit', async e => {
       channels = parseM3U(await file.text());
       source = {mode: 'file', channels};
     } else {
-      source = {mode: 'xtream', server: $('server').value, username: $('username').value.trim(), password: $('password').value};
-      channels = await loadXtream(source.server, source.username, source.password);
+      source = {mode: 'xtream', server: $('server').value, username: $('username').value.trim(), password: $('password').value, relay: $('use-relay').checked};
+      channels = await loadXtream(source.server, source.username, source.password, undefined, {relay: source.relay});
     }
     await setChannels(channels, state.mode === 'xtream' ? 'Xtream Codes · Canlı yayınlar' : 'M3U · Kişisel kanal listesi');
     try {
@@ -299,7 +302,7 @@ async function play(channel) {
       status('HTTPS GEREKLİ'); message('Bu yayın HTTP kullanıyor. Sağlayıcından HTTPS yayın adresi iste.'); return;
     }
     waitTimer = setTimeout(() => { if (token === attempt) playbackError(); }, 30000);
-    if (/\.m3u8(?:$|\?)/i.test(url.href) && !video.canPlayType('application/vnd.apple.mpegurl')) {
+    if ((channel.hls || /\.m3u8(?:$|\?)/i.test(url.href)) && !video.canPlayType('application/vnd.apple.mpegurl')) {
       const Hls = await loadHls(); if (token !== attempt) return;
       if (!Hls?.isSupported()) { playbackError(); return; }
       hls = new Hls({enableWorker: true, xhrSetup: xhr => { xhr.withCredentials = false; }});
@@ -332,6 +335,7 @@ $('clear').onclick = () => {
   $('welcome').hidden = false; video.hidden = true; $('retry').hidden = true;
   $('current-name').textContent = 'Henüz bir kanal seçilmedi'; $('current-group').textContent = 'AKIŞ OYNATICI';
   message(''); status('HAZIR'); updateSectionCategories(); updateFilters(); render();
+  if (location.protocol === 'https:') fetch('/api/iptv/close', {method: 'POST', credentials: 'same-origin', cache: 'no-store'}).catch(() => {});
   deleteSavedSource().catch(() => message('Ekran temizlendi ancak cihazdaki kaynak kaydı silinemedi. Tarayıcı site verilerini temizleyebilirsin.'));
 };
 $('forget-source').onclick = async () => {
@@ -357,7 +361,7 @@ async function restoreSource() {
     message('Kayıtlı kaynak yükleniyor…');
     let channels;
     if (source.mode === 'url') channels = parseM3U(await readRemote(source.url), source.url);
-    else if (source.mode === 'xtream') channels = await loadXtream(source.server, source.username, source.password);
+    else if (source.mode === 'xtream') channels = await loadXtream(source.server, source.username, source.password, undefined, {relay: source.relay});
     else channels = source.channels;
     if (generation !== sourceGeneration) return;
     await setChannels(channels, source.mode === 'xtream' ? 'Xtream Codes · Kayıtlı kaynak' : 'M3U · Kayıtlı kaynak', generation);
