@@ -61,3 +61,13 @@ korunması ayrıca doğrulanmalıdır.
 - Kaynak hatırlama açıkken rehber URL'si güvenli depoda ilgili kaynakla eşleştirilir. Program verisi oturumda tutulur, açılışta tekrar indirilir.
 - Film/dizi detay penceresi ve sağlayıcının döndürdüğü açıklama; dizi bölümleri mevcut seçicide açılır.
 - Kayıt, catch-up, çoklu kaynak, çoklu ekran ve Stalker Portal bu sürümde uygulanmadı.
+
+## 0.2.1 tam ekran oynatıcı
+
+- Katalogdan önizleme tamamen kaldırıldı; kanal seçimi doğrudan tam ekran oynatır. Geri dönüşte yayın durur.
+- Video üzerinde otomatik gizlenen panel: kategori, tarih/saat, logo, kanal adı/numarası, şimdi/sıradaki program ve kalan dakika.
+- Çözünürlük, FPS ve ses kanal sayısı gerçek oynatıcı verisinden gösterilir; bilinmeyen değerler için etiket üretilmez.
+- Canlı program ilerlemesi salt okunurdur. Film/dizi içeriklerinde süre biliniyorsa kaydırma çubuğuyla ileri/geri sarılır.
+- TV rehberi, oturumdaki son 20 kanal/içerik, favoriler, ses/altyazı seçimi, görüntü oranı, yeniden bağlan ve önceki/sonraki kanal.
+- Panel dokunma/OK/yön tuşuyla açılır, 7 saniye sonra gizlenir. Geri önce paneli kapatır, sonra kataloğa döner. Üst geri düğmesi doğrudan kataloğa döner.
+- Kayıt ve sağlayıcı catch-up özelliği eklenmedi. Son izlenenler oturum geçmişidir; geçmiş program yayını değildir.

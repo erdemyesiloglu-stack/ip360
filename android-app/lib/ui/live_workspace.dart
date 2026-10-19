@@ -5,12 +5,11 @@ import '../source.dart';
 enum LiveView { logos, list, guide }
 
 class LiveWorkspace extends StatelessWidget {
-  const LiveWorkspace({super.key, required this.channels, required this.view, required this.preview,
+  const LiveWorkspace({super.key, required this.channels, required this.view,
     required this.selected, required this.epg, required this.now, required this.favorites,
     required this.onSelect, required this.onFavorite, required this.onEpg});
   final List<Channel> channels;
   final LiveView view;
-  final Widget preview;
   final Channel? selected;
   final Map<String, List<Programme>> epg;
   final DateTime now;
@@ -29,12 +28,7 @@ class LiveWorkspace extends StatelessWidget {
       LiveView.guide => Column(children: [_timeline(), Expanded(child: ListView.builder(itemCount: channels.length,
         itemBuilder: (context, i) => _guideRow(context, channels[i], i)))]),
     };
-    if (size.maxWidth >= 760) {
-      return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Expanded(flex: 6, child: content),
-        const VerticalDivider(width: 1), Expanded(flex: 4, child: preview)]);
-    }
-    return Column(children: [SizedBox(height: size.maxHeight > 480 ? 250 : 150, child: preview),
-      const Divider(height: 1), Expanded(child: content)]);
+    return content;
   });
 
   Widget _logo(BuildContext context, Channel channel, int index) => Card(

@@ -17,11 +17,12 @@ void main() {
         addTearDown(tester.view.resetDevicePixelRatio);
         Channel? selected;
         await tester.pumpWidget(MaterialApp(theme: ThemeData.dark(), home: Scaffold(body: LiveWorkspace(
-          channels: const [channel], view: view, preview: const ColoredBox(color: Colors.black, child: Center(child: Text('Önizleme'))),
+          channels: const [channel], view: view, 
           selected: null, epg: {'trt1': [programme]}, now: now, favorites: const {},
           onSelect: (value) => selected = value, onFavorite: (_) {}, onEpg: () {}))));
         expect(tester.takeException(), isNull);
-        expect(find.text('Önizleme'), findsOneWidget);
+        expect(find.text('Önizleme'), findsNothing);
+        expect(tester.getSize(find.byType(LiveWorkspace)), size);
         await tester.tap(find.text('TRT 1'));
         await tester.pump();
         expect(selected, channel);

@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart';
@@ -11,8 +10,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'source.dart';
 import 'epg.dart';
 import 'ui/live_workspace.dart';
-
-class _PlaybackIntent extends Intent { const _PlaybackIntent(); }
+import 'ui/player_screen.dart';
 
 const mint = Color(0xFF79E9C2);
 const kinds = {'live': 'Kanallar', 'movies': 'Filmler', 'series': 'Diziler'};
@@ -65,7 +63,8 @@ class _HomeState extends State<Home> {
   Set<String> _favorites = {};
   SourceConfig? _source;
   Channel? _selected;
-  bool _fullScreen = false, _epgBusy = false, _rememberSource = false;
+  bool _epgBusy = false, _rememberSource = false;
+  final _history = <Channel>[];
   LiveView _liveView = LiveView.list;
   Map<String, List<Programme>> _epg = {};
   String _epgUrl = '';
@@ -148,7 +147,7 @@ class _HomeState extends State<Home> {
       if (!mounted) { return; }
       setState(() {
         _rememberSource = config != null && (!writeStorage || remember);
-        _items = items; _source = config; _selected = null; _fullScreen = false; _epg = {}; _epgUrl = ''; _epgBusy = false; _kind = 'live';
+        _items = items; _source = config; _selected = null; _history.clear(); _epg = {}; _epgUrl = ''; _epgBusy = false; _kind = 'live';
         if (!items.any((c) => c.kind == 'live')) { _kind = items.first.kind; }
         _category = ''; _query = ''; _search.clear(); _favoritesOnly = false;
         _indexCategories(); _notice = service.warnings.isEmpty ? null : service.warnings.join(' ');
@@ -246,7 +245,7 @@ class _HomeState extends State<Home> {
     try {
       await _vault.delete(key: 'source'); await _vault.delete(key: 'epg'); await _player.stop();
       if (!mounted) { return; }
-      setState(() { _source = null; _items = []; _selected = null; _fullScreen = false; _epg = {}; _epgUrl = ''; _epgRequest++; _epgBusy = false; _category = ''; _query = ''; _search.clear(); _indexCategories(); _notice = 'Kaynak kaydı silindi.'; });
+      setState(() { _source = null; _items = []; _selected = null; _history.clear(); _epg = {}; _epgUrl = ''; _epgRequest++; _epgBusy = false; _category = ''; _query = ''; _search.clear(); _indexCategories(); _notice = 'Kaynak kaydı silindi.'; });
     } catch (_) { if (mounted) { setState(() => _notice = 'Kaynak kaydı silinemedi. Yeniden deneyin.'); } }
   }
 
@@ -276,18 +275,40 @@ class _HomeState extends State<Home> {
       finally { if (mounted) { setState(() => _busy = false); } }
     } else { await _play(channel); }
   }
-  Future<void> _play(Channel channel, {bool fullscreen = true}) async {
-    setState(() { _selected = channel; _fullScreen = fullscreen; _notice = null; });
+  Future<void> _play(Channel channel) async {
+    setState(() {
+      _selected = channel; _notice = null;
+      _history.removeWhere((item) => item.key == channel.key);
+      _history.insert(0, channel);
+      if (_history.length > 20) { _history.removeLast(); }
+    });
     try { await _player.open(Media(channel.url)); }
     catch (_) { if (mounted) { setState(() => _notice = 'Yayın başlatılamadı. Bağlantıyı kontrol edin.'); } }
   }
   Future<void> _backToCatalog() async {
-    if (_selected?.kind == 'live') {
-      setState(() => _fullScreen = false);
-    } else {
-      await _player.stop();
-      if (mounted) { setState(() { _selected = null; _fullScreen = false; }); }
-    }
+    await _player.stop();
+    if (mounted) { setState(() => _selected = null); }
+  }
+  Future<void> _showHistory() async {
+    final selected = await showDialog<Channel>(context: context, builder: (context) => SimpleDialog(
+      title: const Text('Son izlenenler'), children: [
+        if (_history.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Text('Henüz izleme geçmişi yok.')),
+        for (final channel in _history) ListTile(leading: Icon(kindIcons[channel.kind]), title: Text(channel.name),
+          subtitle: Text(channel.group), onTap: () => Navigator.pop(context, channel)),
+      ]));
+    if (selected != null && mounted) { await _play(selected); }
+  }
+  List<Channel> get _liveChannels => _items.where((c) => c.kind == 'live' && (_category.isEmpty || categoryOf(c) == _category) &&
+    (!_favoritesOnly || _favorites.contains(c.key)) && normalize(c.name).contains(normalize(_query))).toList();
+  void _stepChannel(int delta) {
+    final channels = _liveChannels;
+    if (channels.isEmpty) { return; }
+    final current = channels.indexWhere((c) => c.key == _selected?.key);
+    _play(channels[(current + delta) % channels.length]);
+  }
+  Future<void> _openGuide() async {
+    await _backToCatalog();
+    if (mounted) { setState(() { _kind = 'live'; _liveView = LiveView.guide; }); }
   }
   void _filter(String kind, String category) {
     if (kind != 'live' && _selected != null) {
@@ -385,7 +406,7 @@ class _HomeState extends State<Home> {
         ListTile(leading: const Icon(Icons.calendar_view_week), title: const Text('Yayın rehberi'), subtitle: const Text('XMLTV kaynağı ekle veya güncelle'),
           onTap: () { Navigator.pop(context); _configureEpg(); }),
         ListTile(leading: const Icon(Icons.shield_outlined), title: const Text('Gizlilik ve kullanım'), onTap: () { Navigator.pop(context); _help(); }),
-        const ListTile(leading: Icon(Icons.info_outline), title: Text('IP360 0.2.0'), subtitle: Text('Telefon • Tablet • Android TV')),
+        const ListTile(leading: Icon(Icons.info_outline), title: Text('IP360 0.2.1'), subtitle: Text('Telefon • Tablet • Android TV')),
       ])), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Kapat'))]));
   }
 
@@ -401,46 +422,6 @@ class _HomeState extends State<Home> {
           onPressed: () { Navigator.pop(context); _select(channel); })]));
   }
 
-  Future<void> _chooseLive(Channel channel) async {
-    if (_selected?.key == channel.key) {
-      setState(() => _fullScreen = true);
-    } else {
-      await _play(channel, fullscreen: false);
-    }
-  }
-
-  Widget _preview() {
-    final channel = _selected;
-    final programmes = channel == null ? <Programme>[] : _epg[channel.epgId] ?? <Programme>[];
-    final current = currentProgramme(programmes, _now);
-    final next = programmes.where((p) => p.start.isAfter(_now)).firstOrNull;
-    return LayoutBuilder(builder: (context, size) => SingleChildScrollView(child: Padding(padding: const EdgeInsets.all(14),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        ConstrainedBox(constraints: BoxConstraints(maxHeight: size.maxHeight < 260 ? 105 : 280), child: AspectRatio(aspectRatio: 16 / 9,
-          child: ClipRRect(borderRadius: BorderRadius.circular(10), child: ColoredBox(color: Colors.black, child: channel == null ?
-            const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.play_circle_outline, color: mint, size: 40),
-              SizedBox(height: 8), Text('Önizleme için kanal seç', style: TextStyle(color: Colors.white54, fontSize: 12))])) : Video(controller: _video))))),
-        const SizedBox(height: 14), Text(channel?.name ?? 'Canlı TV', maxLines: 2, overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-        if (channel != null) ...[
-          const SizedBox(height: 12), Wrap(spacing: 8, runSpacing: 8, children: [
-            FilledButton.icon(onPressed: () => setState(() => _fullScreen = true), icon: const Icon(Icons.fullscreen), label: const Text('Tam ekran')),
-            IconButton(tooltip: 'Oynat / duraklat', onPressed: _player.playOrPause, icon: const Icon(Icons.pause_circle_outline)),
-            IconButton(tooltip: 'Yeniden dene', onPressed: () => _play(channel, fullscreen: false), icon: const Icon(Icons.refresh)),
-          ]),
-        ],
-        const SizedBox(height: 20), const Text('ŞİMDİ', style: TextStyle(color: mint, fontSize: 11, letterSpacing: 2)), const SizedBox(height: 8),
-        Text(current?.title ?? 'Program bilgisi yok', style: const TextStyle(fontSize: 16)),
-        if (current != null) ...[const SizedBox(height: 6), Text('${programmeTime(current.start)} – ${programmeTime(current.end)}', style: const TextStyle(color: Colors.white54)),
-          const SizedBox(height: 10), LinearProgressIndicator(value: (_now.difference(current.start).inSeconds / current.end.difference(current.start).inSeconds).clamp(0, 1)),
-          if (current.description.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 12), child: Text(current.description, maxLines: 5, overflow: TextOverflow.ellipsis))],
-        const SizedBox(height: 20), const Text('SIRADAKİ', style: TextStyle(color: Colors.white38, fontSize: 11, letterSpacing: 2)),
-        const SizedBox(height: 8), Text(next == null ? 'Program bilgisi yok' : '${programmeTime(next.start)}  ${next.title}'),
-        const SizedBox(height: 16), TextButton.icon(onPressed: _epgBusy ? null : _configureEpg,
-          icon: const Icon(Icons.calendar_view_week, size: 18), label: Text(_epgBusy ? 'Rehber yükleniyor…' : 'Yayın rehberi kaynağı')),
-      ]))));
-  }
-
   Widget _empty() => Center(child: SingleChildScrollView(child: Padding(padding: const EdgeInsets.all(28),
     child: Column(mainAxisSize: MainAxisSize.min, children: [
       const Icon(Icons.live_tv, size: 64, color: mint), const SizedBox(height: 24),
@@ -453,18 +434,18 @@ class _HomeState extends State<Home> {
 
   @override
   Widget build(BuildContext context) {
-    if (_selected != null && _fullScreen) {
-      return PopScope(canPop: false, onPopInvokedWithResult: (didPop, result) { if (!didPop) { _backToCatalog(); } },
-        child: Shortcuts(shortcuts: const {
-          SingleActivator(LogicalKeyboardKey.space): _PlaybackIntent(),
-          SingleActivator(LogicalKeyboardKey.mediaPlayPause): _PlaybackIntent(),
-        }, child: Actions(actions: {_PlaybackIntent: CallbackAction<_PlaybackIntent>(onInvoke: (_) { _player.playOrPause(); return null; })},
-          child: Scaffold(appBar: AppBar(leading: IconButton(autofocus: true, tooltip: 'Kataloğa dön', onPressed: _backToCatalog, icon: const Icon(Icons.arrow_back)),
-            title: Text(_selected!.name, overflow: TextOverflow.ellipsis), actions: [
-              IconButton(tooltip: 'Oynat / duraklat', onPressed: _player.playOrPause, icon: const Icon(Icons.pause_circle_outline)),
-              IconButton(tooltip: 'Yeniden dene', onPressed: () => _play(_selected!), icon: const Icon(Icons.refresh)),
-            ]), body: Column(children: [_noticeWidget(), Expanded(child: ColoredBox(color: Colors.black, child: Video(controller: _video)))])),
-        )));
+    if (_selected != null) {
+      final channel = _selected!;
+      final live = channel.kind == 'live';
+      final channels = live ? _liveChannels : <Channel>[];
+      final index = channels.indexWhere((c) => c.key == channel.key);
+      return PlayerScreen(player: _player, controller: _video, channel: channel,
+        programmes: _epg[channel.epgId] ?? [], favorite: _favorites.contains(channel.key),
+        onBack: _backToCatalog, onHistory: _showHistory, onFavorite: () => _toggleFavorite(channel),
+        onRetry: () => _play(channel), onGuide: live ? _openGuide : null,
+        onPrevious: channels.length > 1 ? () => _stepChannel(-1) : null,
+        onNext: channels.length > 1 ? () => _stepChannel(1) : null,
+        channelNumber: index < 0 ? null : index + 1, notice: _notice);
     }
     final visible = _items.where((c) => c.kind == _kind && (_category.isEmpty || categoryOf(c) == _category) &&
       normalize(c.name).contains(normalize(_query)) && (!_favoritesOnly || _favorites.contains(c.key))).toList();
@@ -485,8 +466,8 @@ class _HomeState extends State<Home> {
           ButtonSegment(value: LiveView.guide, icon: Icon(Icons.calendar_view_week, size: 16), label: Text('Rehber'))],
           selected: {_liveView}, onSelectionChanged: (v) => setState(() => _liveView = v.first)))),
       Expanded(child: visible.isEmpty ? _empty() : _kind == 'live' ? LiveWorkspace(channels: visible, view: _liveView,
-        preview: _preview(), selected: _selected, epg: _epg, now: _now, favorites: _favorites,
-        onSelect: _chooseLive, onFavorite: _toggleFavorite, onEpg: _configureEpg) :
+        selected: _selected, epg: _epg, now: _now, favorites: _favorites,
+        onSelect: _play, onFavorite: _toggleFavorite, onEpg: _configureEpg) :
         GridView.builder(padding: const EdgeInsets.all(16), itemCount: visible.length,
           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 210,
             childAspectRatio: .58, crossAxisSpacing: 16, mainAxisSpacing: 16),
