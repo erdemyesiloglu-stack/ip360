@@ -49,3 +49,15 @@ flutter build apk --release --split-per-abi
 Gerçek sağlayıcı hesabı, fiziksel telefon/tablet ve TV üzerinde oynatma, kumanda
 ile tüm oynatıcı kontrolleri ve kaynak kaydının uygulama yeniden açılınca
 korunması ayrıca doğrulanmalıdır.
+
+## 0.2.0 arayüz ve rehber
+
+- Canlı TV: Logolar / Liste / Rehber; geniş ekranlarda yan yana kanal ve video önizlemesi.
+- Telefonlarda önizleme üstte, kaydırılabilir kanal listesi altta.
+- Canlı yayından geri dönüldüğünde önizleme sürer; kategori değişince durur.
+- XMLTV bağlantısı Ayarlar > Yayın rehberi bölümünden eklenir; Xtream adresi hesap bilgilerinden önerilir.
+- M3U tvg-id ve Xtream epg_channel_id ile birebir eşleştirme; 90 dakikalık zaman çizelgesi, şimdi/sıradaki program, program açıklaması.
+- XMLTV saat dilimleri işlenir; rehber çözümlemesi arka planda yapılır. XMLTV dosyası en fazla 30 MB; sıkıştırılmış XMLTV ayrıca desteklenmez.
+- Hatırlanan rehber URL'si güvenli depoda ilgili kaynakla eşleştirilir. Program verisi oturumda tutulur, açılışta tekrar indirilir.
+- Film/dizi detay penceresi ve sağlayıcının döndürdüğü açıklama; dizi bölümleri mevcut seçicide açılır.
+- Kayıt, catch-up, çoklu kaynak, çoklu ekran ve Stalker Portal bu sürümde uygulanmadı.

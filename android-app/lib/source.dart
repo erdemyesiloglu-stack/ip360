@@ -14,8 +14,8 @@ class SourceConfig {
 }
 
 class Channel {
-  const Channel(this.name, this.url, {this.group = 'Diğer', this.logo = '', this.kind = 'live', this.seriesId, this.season});
-  final String name, url, group, logo, kind;
+  const Channel(this.name, this.url, {this.group = 'Diğer', this.logo = '', this.kind = 'live', this.seriesId, this.season, this.epgId = '', this.description = ''});
+  final String name, url, group, logo, kind, epgId, description;
   final String? seriesId, season;
   String get key => seriesId == null ? url : 'series:$seriesId:$name';
 }
@@ -91,7 +91,7 @@ class _M3uParser {
   _M3uParser(this.base);
   final Uri? base;
   final channels = <Channel>[];
-  var name = '', group = 'Diğer', logo = '';
+  var name = '', group = 'Diğer', logo = '', epgId = '';
   var hls = false;
   void add(String raw) {
     final line = raw.replaceFirst('\uFEFF', '').trim();
@@ -100,6 +100,7 @@ class _M3uParser {
     }
     if (hls) { return; }
     if (line.startsWith('#EXTINF:')) {
+      epgId = RegExp(r'tvg-id="([^"]*)"').firstMatch(line)?.group(1) ?? '';
       group = RegExp(r'group-title="([^"]*)"').firstMatch(line)?.group(1) ?? 'Diğer';
       logo = safeLogo(RegExp(r'tvg-logo="([^"]*)"').firstMatch(line)?.group(1), base);
       var quoted = false;
@@ -112,9 +113,9 @@ class _M3uParser {
       try {
         final uri = serverUri(base?.resolve(line).toString() ?? line);
         channels.add(Channel(name.isEmpty ? 'Kanal ${channels.length + 1}' : name, uri.toString(),
-          group: group.isEmpty ? 'Diğer' : group, logo: logo, kind: inferKind(group, uri.toString())));
+          epgId: epgId, group: group.isEmpty ? 'Diğer' : group, logo: logo, kind: inferKind(group, uri.toString())));
       } catch (_) { /* Desteklenmeyen protokolleri atla. */ }
-      name = ''; group = 'Diğer'; logo = '';
+      name = ''; group = 'Diğer'; logo = ''; epgId = '';
     }
   }
   List<Channel> finish() {
@@ -195,7 +196,7 @@ class SourceService {
           if (!RegExp(r'^[a-zA-Z0-9]+$').hasMatch(extension)) { extension = 'mp4'; }
           final url = kind == 'series' ? '' : _stream(config, kind == 'live' ? 'live' : 'movie', id, kind == 'live' ? 'ts' : extension);
           items.add(Channel('${row['name'] ?? 'İçerik'}', url,
-            group: groups['${row['category_id']}'] ?? 'Diğer', kind: kind,
+            group: groups['${row['category_id']}'] ?? 'Diğer', kind: kind, epgId: '${row['epg_channel_id'] ?? ''}', description: '${row['plot'] ?? row['overview'] ?? ''}',
             logo: safeLogo(row[kind == 'series' ? 'cover' : 'stream_icon'], _root(config)),
             seriesId: kind == 'series' ? id : null));
         }

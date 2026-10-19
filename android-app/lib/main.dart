@@ -9,6 +9,10 @@ import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'source.dart';
+import 'epg.dart';
+import 'ui/live_workspace.dart';
+
+class _PlaybackIntent extends Intent { const _PlaybackIntent(); }
 
 const mint = Color(0xFF79E9C2);
 const kinds = {'live': 'Kanallar', 'movies': 'Filmler', 'series': 'Diziler'};
@@ -27,7 +31,12 @@ class IptvApp extends StatelessWidget {
     title: 'IP360', debugShowCheckedModeBanner: false,
     theme: ThemeData(brightness: Brightness.dark, useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(seedColor: mint, brightness: Brightness.dark),
-      scaffoldBackgroundColor: const Color(0xFF10151C)),
+      scaffoldBackgroundColor: const Color(0xFF11161E),
+      appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF11161E), surfaceTintColor: Colors.transparent),
+      dividerColor: const Color(0xFF2A3441),
+      listTileTheme: const ListTileThemeData(iconColor: Colors.white60, textColor: Colors.white, selectedColor: mint),
+      inputDecorationTheme: InputDecorationTheme(filled: true, fillColor: const Color(0xFF1B2430),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
     home: const Home(),
   );
 }
@@ -56,6 +65,13 @@ class _HomeState extends State<Home> {
   Set<String> _favorites = {};
   SourceConfig? _source;
   Channel? _selected;
+  bool _fullScreen = false, _epgBusy = false;
+  LiveView _liveView = LiveView.list;
+  Map<String, List<Programme>> _epg = {};
+  String _epgUrl = '';
+  int _epgRequest = 0;
+  DateTime _now = DateTime.now();
+  Timer? _clock;
   String _kind = 'live', _category = '', _query = '';
   String? _notice;
   bool _busy = false, _favoritesOnly = false;
@@ -67,11 +83,14 @@ class _HomeState extends State<Home> {
     _errors = _player.stream.error.listen((_) {
       if (mounted) { setState(() => _notice = 'Yayın açılamadı. Sağlayıcı erişimini ve bağlantınızı kontrol edin.'); }
     });
+    _clock = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) { setState(() => _now = DateTime.now()); }
+    });
     _restore();
   }
   @override
   void dispose() {
-    _errors?.cancel(); _player.dispose(); _client.close(); _search.dispose();
+    _clock?.cancel(); _errors?.cancel(); _player.dispose(); _client.close(); _search.dispose();
     super.dispose();
   }
 
@@ -84,6 +103,11 @@ class _HomeState extends State<Home> {
       if (stored[0] != null) {
         final config = SourceConfig.fromJson(Map<String, dynamic>.from(jsonDecode(stored[0]!) as Map));
         await _load(config, writeStorage: false);
+        final savedEpg = await _vault.read(key: 'epg');
+        if (mounted && savedEpg != null && _source?.url == config.url) {
+          final saved = jsonDecode(savedEpg) as Map;
+          if (saved['source'] == config.url && saved['url'] is String) { await _loadEpg(saved['url'] as String); }
+        }
       }
     } catch (_) {
       if (mounted) { setState(() => _notice = 'Cihazdaki kaynak kaydı okunamadı. Kaynağı yeniden ekleyebilirsiniz.'); }
@@ -119,10 +143,11 @@ class _HomeState extends State<Home> {
         if (config == null) { throw const FormatException('Önce bir kaynak ekleyin.'); }
         items = await (config.type == 'xtream' ? service.xtream(config) : service.m3u(config.url));
       }
+      _epgRequest++;
       await _player.stop();
       if (!mounted) { return; }
       setState(() {
-        _items = items; _source = config; _selected = null; _kind = 'live';
+        _items = items; _source = config; _selected = null; _fullScreen = false; _epg = {}; _epgUrl = ''; _epgBusy = false; _kind = 'live';
         if (!items.any((c) => c.kind == 'live')) { _kind = items.first.kind; }
         _category = ''; _query = ''; _search.clear(); _favoritesOnly = false;
         _indexCategories(); _notice = service.warnings.isEmpty ? null : service.warnings.join(' ');
@@ -218,9 +243,9 @@ class _HomeState extends State<Home> {
 
   Future<void> _removeSource() async {
     try {
-      await _vault.delete(key: 'source'); await _player.stop();
+      await _vault.delete(key: 'source'); await _vault.delete(key: 'epg'); await _player.stop();
       if (!mounted) { return; }
-      setState(() { _source = null; _items = []; _selected = null; _category = ''; _query = ''; _search.clear(); _indexCategories(); _notice = 'Kaynak kaydı silindi.'; });
+      setState(() { _source = null; _items = []; _selected = null; _fullScreen = false; _epg = {}; _epgUrl = ''; _epgRequest++; _epgBusy = false; _category = ''; _query = ''; _search.clear(); _indexCategories(); _notice = 'Kaynak kaydı silindi.'; });
     } catch (_) { if (mounted) { setState(() => _notice = 'Kaynak kaydı silinemedi. Yeniden deneyin.'); } }
   }
 
@@ -250,16 +275,23 @@ class _HomeState extends State<Home> {
       finally { if (mounted) { setState(() => _busy = false); } }
     } else { await _play(channel); }
   }
-  Future<void> _play(Channel channel) async {
-    setState(() { _selected = channel; _notice = null; });
+  Future<void> _play(Channel channel, {bool fullscreen = true}) async {
+    setState(() { _selected = channel; _fullScreen = fullscreen; _notice = null; });
     try { await _player.open(Media(channel.url)); }
     catch (_) { if (mounted) { setState(() => _notice = 'Yayın başlatılamadı. Bağlantıyı kontrol edin.'); } }
   }
   Future<void> _backToCatalog() async {
-    await _player.stop();
-    if (mounted) { setState(() => _selected = null); }
+    if (_selected?.kind == 'live') {
+      setState(() => _fullScreen = false);
+    } else {
+      await _player.stop();
+      if (mounted) { setState(() { _selected = null; _fullScreen = false; }); }
+    }
   }
   void _filter(String kind, String category) {
+    if (kind != 'live' && _selected != null) {
+      _player.stop(); _selected = null;
+    }
     setState(() { _kind = kind; _category = category; _query = ''; _search.clear(); _favoritesOnly = false; });
     _scaffoldKey.currentState?.closeDrawer();
   }
@@ -279,6 +311,8 @@ class _HomeState extends State<Home> {
     const Divider(),
     ListTile(leading: const Icon(Icons.star_outline), title: const Text('Favoriler'), selected: _favoritesOnly,
       onTap: () { setState(() => _favoritesOnly = !_favoritesOnly); _scaffoldKey.currentState?.closeDrawer(); }),
+    ListTile(leading: const Icon(Icons.playlist_play), title: const Text('Kaynaklar'), onTap: _sources),
+    ListTile(leading: const Icon(Icons.settings_outlined), title: const Text('Ayarlar'), onTap: _settings),
     ListTile(leading: const Icon(Icons.info_outline), title: const Text('Gizlilik ve kullanım'), onTap: _help),
   ])));
 
@@ -294,54 +328,183 @@ class _HomeState extends State<Home> {
   Widget _noticeWidget() => _notice == null ? const SizedBox.shrink() : MaterialBanner(content: Text(_notice!),
     actions: [TextButton(onPressed: () => setState(() => _notice = null), child: const Text('Kapat'))]);
 
+  String _suggestEpg() {
+    if (_epgUrl.isNotEmpty) { return _epgUrl; }
+    if (_source?.type != 'xtream') { return ''; }
+    final base = serverUri(_source!.url);
+    return base.replace(path: '${base.path.replaceFirst(RegExp(r'/+$'), '')}/xmltv.php',
+      queryParameters: {'username': _source!.username, 'password': _source!.password}).toString();
+  }
+
+  Future<void> _configureEpg() async {
+    final controller = TextEditingController(text: _suggestEpg());
+    final url = await showDialog<String>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Yayın rehberi • XMLTV'), content: SizedBox(width: 480, child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Text('Sağlayıcının XMLTV bağlantısını ekle. Kanallar tvg-id / EPG kimliği ile eşleştirilir. Rehber yoksa kanal izleme devam eder.'),
+        const SizedBox(height: 16), TextField(controller: controller, keyboardType: TextInputType.url, autocorrect: false, enableSuggestions: false,
+          decoration: const InputDecoration(labelText: 'XMLTV bağlantısı', hintText: 'https://…/epg.xml')),
+      ])), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Vazgeç')),
+        FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Rehberi yükle'))]));
+    controller.dispose();
+    if (url == null || !mounted) { return; }
+    await _loadEpg(url);
+  }
+
+  Future<void> _loadEpg(String url) async {
+    final request = ++_epgRequest;
+    setState(() { _epgBusy = true; _notice = null; });
+    try {
+      final data = await EpgService(_client).load(url);
+      if (!mounted || request != _epgRequest) { return; }
+      setState(() { _epg = data; _epgUrl = url; _now = DateTime.now();
+        _notice = data.isEmpty ? 'XMLTV dosyasında geçerli program bulunamadı.' : 'Yayın rehberi yüklendi.'; });
+      if (_source != null) {
+        await _vault.write(key: 'epg', value: jsonEncode({'source': _source!.url, 'url': url}));
+      }
+    } catch (_) {
+      if (mounted && request == _epgRequest) { setState(() => _notice = 'Yayın rehberi yüklenemedi. Geçerli sertifikalı bir XMLTV bağlantısı kullanın (en fazla 30 MB).'); }
+    } finally {
+      if (mounted && request == _epgRequest) { setState(() => _epgBusy = false); }
+    }
+  }
+
+  Future<void> _sources() async {
+    _scaffoldKey.currentState?.closeDrawer();
+    await showDialog<void>(context: context, builder: (context) => AlertDialog(title: const Text('Kaynaklar'),
+      content: Text(_source == null ? (_items.isEmpty ? 'Henüz kaynak eklenmedi.' : 'Cihazdan açılan M3U dosyası • bu oturum') :
+        '${_source!.type == 'xtream' ? 'Xtream' : 'M3U'} • ${Uri.tryParse(_source!.url)?.host ?? ''}\n${_items.length} içerik\n\nYeni kaynak mevcut kataloğun yerine açılır.'),
+      actions: [TextButton(onPressed: () { Navigator.pop(context); _removeSource(); }, child: const Text('Kaynağı sil')),
+        FilledButton(onPressed: () { Navigator.pop(context); _addSource(); }, child: const Text('Kaynak ekle'))]));
+  }
+
+  Future<void> _settings() async {
+    _scaffoldKey.currentState?.closeDrawer();
+    await showDialog<void>(context: context, builder: (context) => AlertDialog(title: const Text('Ayarlar'),
+      content: SizedBox(width: 400, child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(leading: const Icon(Icons.calendar_view_week), title: const Text('Yayın rehberi'), subtitle: const Text('XMLTV kaynağı ekle veya güncelle'),
+          onTap: () { Navigator.pop(context); _configureEpg(); }),
+        ListTile(leading: const Icon(Icons.shield_outlined), title: const Text('Gizlilik ve kullanım'), onTap: () { Navigator.pop(context); _help(); }),
+        const ListTile(leading: Icon(Icons.info_outline), title: Text('IP360 0.2.0'), subtitle: Text('Telefon • Tablet • Android TV')),
+      ])), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Kapat'))]));
+  }
+
+  Future<void> _details(Channel channel) async {
+    await showDialog<void>(context: context, builder: (context) => AlertDialog(
+      title: Text(channel.name), content: SizedBox(width: 500, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        if (channel.logo.isNotEmpty) SizedBox(height: 220, child: Image.network(channel.logo, fit: BoxFit.contain,
+          errorBuilder: (_, error, stack) => const Icon(Icons.movie_outlined, size: 80, color: mint))),
+        const SizedBox(height: 16), Text(channel.group), const SizedBox(height: 12),
+        Text(channel.description.isEmpty ? 'Bu içerik için açıklama bulunmuyor.' : channel.description),
+      ]))), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Kapat')),
+        FilledButton.icon(icon: const Icon(Icons.play_arrow), label: Text(channel.seriesId != null ? 'Bölümleri göster' : 'Oynat'),
+          onPressed: () { Navigator.pop(context); _select(channel); })]));
+  }
+
+  Future<void> _chooseLive(Channel channel) async {
+    if (_selected?.key == channel.key) {
+      setState(() => _fullScreen = true);
+    } else {
+      await _play(channel, fullscreen: false);
+    }
+  }
+
+  Widget _preview() {
+    final channel = _selected;
+    final programmes = channel == null ? <Programme>[] : _epg[channel.epgId] ?? <Programme>[];
+    final current = currentProgramme(programmes, _now);
+    final next = programmes.where((p) => p.start.isAfter(_now)).firstOrNull;
+    return LayoutBuilder(builder: (context, size) => SingleChildScrollView(child: Padding(padding: const EdgeInsets.all(14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        ConstrainedBox(constraints: BoxConstraints(maxHeight: size.maxHeight < 260 ? 105 : 280), child: AspectRatio(aspectRatio: 16 / 9,
+          child: ClipRRect(borderRadius: BorderRadius.circular(10), child: ColoredBox(color: Colors.black, child: channel == null ?
+            const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.play_circle_outline, color: mint, size: 40),
+              SizedBox(height: 8), Text('Önizleme için kanal seç', style: TextStyle(color: Colors.white54, fontSize: 12))])) : Video(controller: _video))))),
+        const SizedBox(height: 14), Text(channel?.name ?? 'Canlı TV', maxLines: 2, overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+        if (channel != null) ...[
+          const SizedBox(height: 12), Wrap(spacing: 8, runSpacing: 8, children: [
+            FilledButton.icon(onPressed: () => setState(() => _fullScreen = true), icon: const Icon(Icons.fullscreen), label: const Text('Tam ekran')),
+            IconButton(tooltip: 'Oynat / duraklat', onPressed: _player.playOrPause, icon: const Icon(Icons.pause_circle_outline)),
+            IconButton(tooltip: 'Yeniden dene', onPressed: () => _play(channel, fullscreen: false), icon: const Icon(Icons.refresh)),
+          ]),
+        ],
+        const SizedBox(height: 20), const Text('ŞİMDİ', style: TextStyle(color: mint, fontSize: 11, letterSpacing: 2)), const SizedBox(height: 8),
+        Text(current?.title ?? 'Program bilgisi yok', style: const TextStyle(fontSize: 16)),
+        if (current != null) ...[const SizedBox(height: 6), Text('${programmeTime(current.start)} – ${programmeTime(current.end)}', style: const TextStyle(color: Colors.white54)),
+          const SizedBox(height: 10), LinearProgressIndicator(value: (_now.difference(current.start).inSeconds / current.end.difference(current.start).inSeconds).clamp(0, 1)),
+          if (current.description.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 12), child: Text(current.description, maxLines: 5, overflow: TextOverflow.ellipsis))],
+        const SizedBox(height: 20), const Text('SIRADAKİ', style: TextStyle(color: Colors.white38, fontSize: 11, letterSpacing: 2)),
+        const SizedBox(height: 8), Text(next == null ? 'Program bilgisi yok' : '${programmeTime(next.start)}  ${next.title}'),
+        const SizedBox(height: 16), TextButton.icon(onPressed: _epgBusy ? null : _configureEpg,
+          icon: const Icon(Icons.calendar_view_week, size: 18), label: Text(_epgBusy ? 'Rehber yükleniyor…' : 'Yayın rehberi kaynağı')),
+      ]))));
+  }
+
+  Widget _empty() => Center(child: SingleChildScrollView(child: Padding(padding: const EdgeInsets.all(28),
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      const Icon(Icons.live_tv, size: 64, color: mint), const SizedBox(height: 24),
+      Text(_items.isEmpty ? 'Ekranın, senin yayınların.' : 'Eşleşen içerik bulunamadı.', textAlign: TextAlign.center,
+        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600)), const SizedBox(height: 10),
+      Text(_items.isEmpty ? 'M3U veya Xtream kaynağını ekleyerek başla.' : 'Başka bir kategori seç veya aramayı temizle.', textAlign: TextAlign.center,
+        style: const TextStyle(color: Colors.white54)), const SizedBox(height: 24),
+      FilledButton.icon(onPressed: _busy ? null : _addSource, icon: const Icon(Icons.add), label: const Text('Kaynak ekle')),
+    ]))));
+
   @override
   Widget build(BuildContext context) {
-    if (_selected != null) {
-      return PopScope(canPop: false, onPopInvokedWithResult: (didPop, _) { if (!didPop) { _backToCatalog(); } },
+    if (_selected != null && _fullScreen) {
+      return PopScope(canPop: false, onPopInvokedWithResult: (didPop, result) { if (!didPop) { _backToCatalog(); } },
         child: Shortcuts(shortcuts: const {
-          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-          SingleActivator(LogicalKeyboardKey.mediaPlayPause): ActivateIntent(),
-        }, child: Actions(actions: {ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) { _player.playOrPause(); return null; })},
+          SingleActivator(LogicalKeyboardKey.space): _PlaybackIntent(),
+          SingleActivator(LogicalKeyboardKey.mediaPlayPause): _PlaybackIntent(),
+        }, child: Actions(actions: {_PlaybackIntent: CallbackAction<_PlaybackIntent>(onInvoke: (_) { _player.playOrPause(); return null; })},
           child: Scaffold(appBar: AppBar(leading: IconButton(autofocus: true, tooltip: 'Kataloğa dön', onPressed: _backToCatalog, icon: const Icon(Icons.arrow_back)),
             title: Text(_selected!.name, overflow: TextOverflow.ellipsis), actions: [
-              IconButton(tooltip: 'Oynat / duraklat', onPressed: () => _player.playOrPause(), icon: const Icon(Icons.pause_circle_outline)),
+              IconButton(tooltip: 'Oynat / duraklat', onPressed: _player.playOrPause, icon: const Icon(Icons.pause_circle_outline)),
               IconButton(tooltip: 'Yeniden dene', onPressed: () => _play(_selected!), icon: const Icon(Icons.refresh)),
             ]), body: Column(children: [_noticeWidget(), Expanded(child: ColoredBox(color: Colors.black, child: Video(controller: _video)))])),
         )));
     }
     final visible = _items.where((c) => c.kind == _kind && (_category.isEmpty || categoryOf(c) == _category) &&
       normalize(c.name).contains(normalize(_query)) && (!_favoritesOnly || _favorites.contains(c.key))).toList();
-    final wide = MediaQuery.sizeOf(context).width >= 1000;
+    final wide = MediaQuery.sizeOf(context).width >= 1050;
     final catalog = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Padding(padding: const EdgeInsets.fromLTRB(20, 20, 20, 8), child: Row(children: [
-        Expanded(child: Text(_category.isEmpty ? kinds[_kind]! : _category, style: Theme.of(context).textTheme.headlineSmall)),
-        Text('${visible.length} içerik', style: const TextStyle(color: Colors.white54)),
+      Padding(padding: const EdgeInsets.fromLTRB(18, 18, 18, 8), child: Row(children: [
+        Expanded(child: Text(_favoritesOnly ? 'Favoriler' : _category.isEmpty ? kinds[_kind]! : _category,
+          maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600))),
+        Text('${visible.length} içerik', style: const TextStyle(color: Colors.white38, fontSize: 12)),
       ])),
-      Padding(padding: const EdgeInsets.all(16), child: TextField(controller: _search,
-        onChanged: (v) => setState(() => _query = v), decoration: const InputDecoration(
-          prefixIcon: Icon(Icons.search), hintText: 'İçerik ara', border: OutlineInputBorder()))),
-      Expanded(child: visible.isEmpty ? Center(child: Padding(padding: const EdgeInsets.all(24),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.video_library_outlined, size: 52, color: mint), const SizedBox(height: 16),
-          Text(_items.isEmpty ? 'Başlamak için yayın kaynağını ekle.' : 'Bu kategoride eşleşen içerik yok.', textAlign: TextAlign.center),
-          const SizedBox(height: 20), FilledButton.icon(onPressed: _busy ? null : _addSource,
-            icon: const Icon(Icons.add), label: const Text('Kaynak ekle')),
-        ]))) : GridView.builder(padding: const EdgeInsets.all(16), itemCount: visible.length,
-          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: _kind == 'live' ? 230 : 210,
-            childAspectRatio: _kind == 'live' ? 1.1 : .58, crossAxisSpacing: 16, mainAxisSpacing: 16),
+      Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 12), child: TextField(controller: _search,
+        onChanged: (v) => setState(() => _query = v), decoration: const InputDecoration(isDense: true,
+          prefixIcon: Icon(Icons.search), hintText: 'Kanal, film veya dizi ara'))),
+      if (_kind == 'live') Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 10), child: SizedBox(width: double.infinity,
+        child: SegmentedButton<LiveView>(showSelectedIcon: false, segments: const [
+          ButtonSegment(value: LiveView.logos, icon: Icon(Icons.grid_view, size: 16), label: Text('Logolar')),
+          ButtonSegment(value: LiveView.list, icon: Icon(Icons.view_list, size: 16), label: Text('Liste')),
+          ButtonSegment(value: LiveView.guide, icon: Icon(Icons.calendar_view_week, size: 16), label: Text('Rehber'))],
+          selected: {_liveView}, onSelectionChanged: (v) => setState(() => _liveView = v.first)))),
+      Expanded(child: visible.isEmpty ? _empty() : _kind == 'live' ? LiveWorkspace(channels: visible, view: _liveView,
+        preview: _preview(), selected: _selected, epg: _epg, now: _now, favorites: _favorites,
+        onSelect: _chooseLive, onFavorite: _toggleFavorite, onEpg: _configureEpg) :
+        GridView.builder(padding: const EdgeInsets.all(16), itemCount: visible.length,
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 210,
+            childAspectRatio: .58, crossAxisSpacing: 16, mainAxisSpacing: 16),
           itemBuilder: (context, index) => _MediaCard(key: ValueKey(visible[index].key), channel: visible[index],
             favorite: _favorites.contains(visible[index].key), autofocus: index == 0,
-            onTap: () => _select(visible[index]), onFavorite: () => _toggleFavorite(visible[index])))),
+            onTap: () => _details(visible[index]), onFavorite: () => _toggleFavorite(visible[index])))),
     ]);
     return Scaffold(key: _scaffoldKey, drawer: wide ? null : _navigation(),
-      appBar: AppBar(title: const Text('IP360'), actions: [
-        TextButton.icon(onPressed: _busy ? null : _addSource, icon: const Icon(Icons.add), label: const Text('Kaynak')),
-        IconButton(tooltip: 'Kaynağı sil', onPressed: _busy ? null : _removeSource, icon: const Icon(Icons.delete_outline)),
+      appBar: AppBar(title: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.play_circle_fill, color: mint), SizedBox(width: 8),
+        Text('IP360', style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.w700))]), actions: [
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Center(child: Text(programmeTime(_now), style: const TextStyle(color: Colors.white54, fontSize: 13)))),
+        IconButton(tooltip: 'Kaynaklar', onPressed: _busy ? null : _sources, icon: const Icon(Icons.playlist_add)),
+        IconButton(tooltip: 'Ayarlar', onPressed: _settings, icon: const Icon(Icons.settings_outlined)),
       ]), body: SafeArea(child: Column(children: [
-        if (_busy) const LinearProgressIndicator(), _noticeWidget(),
-        Expanded(child: Row(children: [if (wide) SizedBox(width: 240, child: _navigation()), Expanded(child: catalog)])),
+        if (_busy || _epgBusy) const LinearProgressIndicator(minHeight: 2), _noticeWidget(),
+        Expanded(child: Row(children: [if (wide) SizedBox(width: 230, child: _navigation()), Expanded(child: catalog)])),
       ])));
   }
+
 }
 
 class _MediaCard extends StatefulWidget {
