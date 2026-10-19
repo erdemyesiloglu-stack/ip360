@@ -147,7 +147,7 @@ class _PlayerChromeState extends State<PlayerChrome> {
             if (widget.onNext != null) IconButton(tooltip: 'Sonraki kanal', onPressed: () => _interact(widget.onNext!), icon: const Icon(Icons.skip_next)),
             IconButton(tooltip: 'Paneli gizle', onPressed: () => _setVisible(false), icon: const Icon(Icons.keyboard_arrow_down)),
           ]), if (!dense) const SizedBox(height: 8),
-          SizedBox(height: dense ? 64 : compact ? 84 : 108, child: ListView(scrollDirection: Axis.horizontal, children: [
+          SizedBox(height: dense ? 72 : compact ? 84 : 108, child: ListView(scrollDirection: Axis.horizontal, children: [
             if (dense) Row(mainAxisSize: MainAxisSize.min, children: [
               if (widget.onPrevious != null) IconButton(tooltip: 'Önceki kanal', onPressed: () => _interact(widget.onPrevious!), icon: const Icon(Icons.skip_previous)),
               IconButton(focusNode: _playFocus, autofocus: true, tooltip: widget.state.playing ? 'Duraklat' : 'Oynat',
@@ -179,5 +179,5 @@ class _PlayerChromeState extends State<PlayerChrome> {
     child: SizedBox(width: compact ? 116 : 148, child: Material(color: const Color(0xEE293A43), borderRadius: BorderRadius.circular(5),
       child: InkWell(borderRadius: BorderRadius.circular(5), focusColor: const Color(0xFF4A626D), onTap: () { _setVisible(false); action(); },
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, size: compact ? 28 : 38), const SizedBox(height: 8),
-          Text(label, textAlign: TextAlign.center, maxLines: 2, style: const TextStyle(fontSize: 12))])))));
+          Flexible(child: Text(label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, height: 1.1)))])))));
 }
