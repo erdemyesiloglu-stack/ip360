@@ -62,7 +62,7 @@ test('Relay authenticates, hides credentials, rewrites HLS segments and keys and
     assert.equal(response.headers.get('cache-control'), 'no-store');
     const otherSession = await handleRequest(openRequest(), env);
     const otherCookie = otherSession.headers.get('set-cookie').split(';')[0];
-    assert.equal((await handleRequest(authenticated(streams[0].relay_url, otherCookie), env)).status, 403);
+    assert.equal((await handleRequest(authenticated(segment, otherCookie), env)).status, 403);
   } finally { globalThis.fetch = original; }
 });
 test('Provider authentication rejection never creates a session', async () => {
@@ -89,4 +89,45 @@ test('Closing a source expires its browser relay cookie without provider request
   }), {});
   assert.equal(response.status, 200);
   assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+});
+test('M3U link imports live channels, films and series without returning credentials', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async address => {
+    const url = new URL(address);
+    assert.equal(url.hostname, 'trsmart.net');
+    if (url.pathname === '/player_api.php') return Response.json({user_info: {auth: 1}});
+    if (url.pathname === '/get.php') return new Response('#EXTM3U\n#EXTINF:-1 group-title="Ulusal",Kanal\nhttp://trsmart.net/live/test-user/test-password/42.ts\n#EXTINF:-1 group-title="Aksiyon Filmler",Film\nhttp://trsmart.net/movie/test-user/test-password/43.mp4\n#EXTINF:-1 group-title="Diziler",Dizi\nhttp://trsmart.net/series/test-user/test-password/44.mp4');
+    throw new Error('Unexpected URL');
+  };
+  try {
+    const response = await handleRequest(new Request(origin + '/api/iptv/playlist', {
+      method: 'POST', headers: {'Content-Type': 'application/json', Origin: origin},
+      body: JSON.stringify({url: 'http://trsmart.net/get.php?username=test-user&password=test-password&type=m3u_plus'}),
+    }), env);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.deepEqual(result.channels.map(c => c.kind), ['live','movies','series']);
+    assert.equal(result.channels[0].hls, true);
+    assert.equal(result.channels[0].url, origin + '/api/iptv/play/live/42.m3u8');
+    assert.ok(!JSON.stringify(result).includes('test-password'));
+    assert.ok(!JSON.stringify(result).includes('test-user'));
+    assert.match(response.headers.get('set-cookie'), /HttpOnly/);
+  } finally { globalThis.fetch = original; }
+});
+test('Readiness reports configuration without exposing secrets', async () => {
+  const missing = await (await handleRequest(new Request(origin + '/api/iptv/status'), {})).json();
+  const ready = await (await handleRequest(new Request(origin + '/api/iptv/status'), env)).json();
+  assert.equal(missing.ready, false);
+  assert.equal(ready.ready, true);
+  assert.ok(!JSON.stringify(ready).includes(env.IPTV_SESSION_SECRET));
+});
+test('Provider response format failures are returned as diagnostic codes without raw content', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => new Response('<html>sensitive provider response</html>');
+  try {
+    const response = await handleRequest(openRequest(), env);
+    const result = await response.json();
+    assert.equal(result.code, 'PROVIDER_INVALID_RESPONSE');
+    assert.ok(!JSON.stringify(result).includes('sensitive'));
+  } finally { globalThis.fetch = original; }
 });

@@ -71,12 +71,12 @@ dosyalarını kontrol eder. Harici npm bağımlılığı veya frontend derleyici
 Yerel önizleme için Python 3 kuruluysa `npm start` ve `http://localhost:4173`.
 `npm run standalone` kurulum gerektirmeyen `akis-iptv.html` dosyasını üretir.
 
-26 parser, kategori, ağ okuma, şifreleme ve aracı bağlantı testi geçti (aracı testleri sahte sağlayıcı yanıtları kullanır). Gerçek sağlayıcı hesabı
+31 parser, kategori, ağ okuma, şifreleme ve aracı bağlantı testi geçti (aracı testleri sahte sağlayıcı yanıtları kullanır). Gerçek sağlayıcı hesabı
 ile oynatma ve gerçek Android/Windows tarayıcı testleri ayrıca yapılmalıdır.
 Bu depoya yüklenmiş olması, Pages projesinin henüz yayınlandığı anlamına gelmez.
 
 
-## HTTP Xtream bağlantısı (trsmart.net)
+## HTTP/CORS aracı bağlantısı (trsmart.net)
 
 HTTPS sayfa HTTP sağlayıcıya doğrudan bağlanamaz. Bu depo, yalnızca
 `trsmart.net` için bir HTTPS aracı içerir. Genel amaçlı URL proxy'si değildir.
@@ -88,13 +88,13 @@ HTTPS sayfa HTTP sağlayıcıya doğrudan bağlanamaz. Bu depo, yalnızca
 3. Değerini parola yöneticisiyle üretilmiş en az 32 rastgele karakter olarak belirleyin.
    Bu değeri GitHub'a veya sohbet mesajına koymayın.
 4. Kaydedip yeni deployment başlatın / son deployment'ı yeniden deneyin.
-5. Uygulamadaki Xtream formunda **HTTP sunucu için aracı bağlantıyı kullan**
+5. Uygulamadaki M3U bağlantısı veya Xtream formunda **HTTP/CORS sorunları için aracı bağlantıyı kullan**
    kutusunu işaretleyip kaynağı yükleyin.
 
 Hesap bilgileri uygulamaya HTTPS POST ile gelir. Sağlayıcı kimliği doğrulandıktan
 sonra iki saatlik, AES-GCM şifreli `HttpOnly; Secure; SameSite=Strict` oturum
-çerezi oluşturulur. Yayın adresleri şifreli ve oturuma bağlı belirteçlerle
-sunulur; kullanıcı adı/şifre aracı medya adresine açık yazılmaz. Manifestler,
+çerezi oluşturulur. İlk yayın adresleri yalnızca tür ve sayısal yayın kimliğini taşır. HLS alt
+adresleri şifreli ve oturuma bağlı belirteçlerle sunulur; kullanıcı adı/şifre aracı medya adresine açık yazılmaz. Manifestler,
 HLS parçaları ve anahtar adresleri aracı üzerinden taşınır. API/medya yanıtları
 önbelleğe alınmaz; sunucuda hesap veritabanı veya uygulama günlük kaydı tutulmaz.
 Cloudflare'ın altyapı ve hesap seviyesinde yapılandırılan günlükleme politikaları
@@ -103,7 +103,26 @@ ayrıca geçerlidir. Normal yerel kaynak kaydı yine kullanıcının isteğine b
 **Sınırlar:** Cloudflare ile HTTP sağlayıcı arasındaki bağlantı şifreli değildir.
 Sağlayıcı Cloudflare çıkışını reddedebilir; bu durumda aracı çalışmayabilir.
 Başka CDN alan adına yönlenen yayınlar güvenlik için reddedilir. Başka sağlayıcılar,
-HTTP M3U dosyası aktarımı, DRM ve kodek dönüştürme bu aracıya dahil değildir.
+cihazdan seçilen M3U dosyalarının aracı üzerinden aktarımı, DRM ve kodek dönüştürme bu aracıya dahil değildir.
 Oturum bittiğinde kaynağı yeniden yüklemek gerekir. Gerçek sağlayıcı hesabıyla
 uçtan uca oynatma henüz doğrulanmadı. Sunucu sırrı eklenene kadar uç noktalar
 503 döndürür; mevcut doğrudan HTTPS bağlantıları çalışmaya devam eder.
+
+
+### M3U bağlantısı ve tanılama
+
+Aracı seçeneği M3U bağlantısında da kullanılabilir. Şu an trsmart.net üzerindeki
+`get.php?username=…&password=…` biçimi veya aynı hesap parametrelerini içeren
+`.m3u` / `.m3u8` bağlantıları desteklenir. Parametreler HTTPS POST gövdesinde
+aracıya gönderilir, aracı hesap doğrulaması yapar. Standart live/movie/series
+adresleri, hesap bilgileri içermeyen uygulama adreslerine çevrilir; canlı TS
+adresleri sağlayıcının HLS adresine dönüştürülerek istenir. Bu, kodek dönüştürme
+değildir. Farklı hesaba/sağlayıcıya ait veya standart dışı adresler atlanır.
+Film ve dizi kaynakları M3U listesinden alınır; Xtream VOD/sezon API desteği eklenmez.
+
+`/api/iptv/status` yalnızca oturum sırrının yapılandırılıp yapılandırılmadığını
+bildirir; sır, hesap veya sağlayıcı yanıtı döndürmez. İstemci eksik yapılandırma,
+sağlayıcı reddi, zaman aşımı, farklı sunucu yönlendirmesi ve HTML hata sayfalarını
+ayrı güvenli mesajlarla gösterir. Büyük kataloglarda her kanal için ayrı token
+şifreleme yapılmaz; oturum kimliği çerezde doğrulanır. Aracıdaki HTTP görseller
+şimdilik atlanır, HTTPS görseller ve yer tutucular kullanılır.

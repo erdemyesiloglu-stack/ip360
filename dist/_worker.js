@@ -1,6 +1,11 @@
+import {parseM3U} from './core.js';
+
 const COOKIE = 'ip360_relay';
 const TTL = 2 * 60 * 60 * 1000;
 const HOST = 'trsmart.net';
+class ProviderError extends Error {
+  constructor(code) { super(code); this.code = code; }
+}
 
 function failure(status, message, code = 'RELAY_ERROR') {
   return Response.json({message, code}, {status, headers: {'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer'}});
@@ -41,7 +46,8 @@ async function upstream(url, headers = {}, method = 'GET') {
     const location = response.headers.get('location');
     await response.body?.cancel();
     if (!location) throw new Error('Invalid redirect');
-    target = allowed(new URL(location, target));
+    try { target = allowed(new URL(location, target)); }
+    catch { throw new ProviderError('PROVIDER_REDIRECT'); }
   }
   throw new Error('Too many redirects');
 }
@@ -64,9 +70,15 @@ async function limitedText(response, limit) {
 async function providerApi(session, action) {
   const url = new URL('player_api.php', session.server);
   url.search = new URLSearchParams({username: session.username, password: session.password, ...(action ? {action} : {})});
-  const {response} = await upstream(url);
-  if (!response.ok) { await response.body?.cancel(); throw new Error('Provider unavailable'); }
-  return JSON.parse(await limitedText(response, 20 * 1024 * 1024));
+  let response;
+  try { ({response} = await upstream(url)); }
+  catch (error) {
+    if (error instanceof ProviderError) throw error;
+    throw new ProviderError(error.name === 'TimeoutError' || error.name === 'AbortError' ? 'PROVIDER_TIMEOUT' : 'PROVIDER_UNREACHABLE');
+  }
+  if (!response.ok) { await response.body?.cancel(); throw new ProviderError('PROVIDER_HTTP_ERROR'); }
+  try { return JSON.parse(await limitedText(response, 20 * 1024 * 1024)); }
+  catch { throw new ProviderError('PROVIDER_INVALID_RESPONSE'); }
 }
 async function mediaAddress(target, session, key, origin) {
   const url = allowed(target);
@@ -95,6 +107,11 @@ export async function handleRequest(request, env) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith('/api/iptv/')) return env.ASSETS ? env.ASSETS.fetch(request) : new Response('Not found', {status: 404});
   if (request.headers.get('sec-fetch-site') === 'cross-site') return failure(403, 'Bu bağlantıya izin verilmedi.');
+  if (url.pathname === '/api/iptv/status') {
+    if (request.method !== 'GET') return failure(405, 'İstek yöntemi desteklenmiyor.');
+    return Response.json({ready: typeof env.IPTV_SESSION_SECRET === 'string' && env.IPTV_SESSION_SECRET.length >= 32, revision: 2},
+      {headers: {'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer'}});
+  }
   if (url.pathname === '/api/iptv/close') {
     if (request.method !== 'POST' || request.headers.get('origin') !== url.origin) return failure(403, 'Bu bağlantıya izin verilmedi.');
     return Response.json({ok: true}, {headers: {'Cache-Control': 'no-store', 'Set-Cookie': `${COOKIE}=; Path=/api/iptv; Max-Age=0; HttpOnly; Secure; SameSite=Strict`}});
@@ -103,13 +120,21 @@ export async function handleRequest(request, env) {
     return failure(503, 'HTTP bağlantı desteği için sunucu yapılandırması tamamlanmalı.', 'RELAY_NOT_CONFIGURED');
   }
   const key = await encryptionKey(env.IPTV_SESSION_SECRET);
-  if (url.pathname === '/api/iptv/open') {
+  if (url.pathname === '/api/iptv/open' || url.pathname === '/api/iptv/playlist') {
     if (request.method !== 'POST') return failure(405, 'İstek yöntemi desteklenmiyor.');
     if (request.headers.get('origin') !== url.origin || !request.headers.get('content-type')?.startsWith('application/json')) return failure(403, 'Bu bağlantıya izin verilmedi.');
     let input;
     try { input = JSON.parse(await limitedText(request, 8192)); } catch { return failure(400, 'Hesap bilgileri okunamadı.'); }
+    let playlistUrl;
+    if (url.pathname === '/api/iptv/playlist') {
+      try { playlistUrl = allowed(input.url); }
+      catch { return failure(400, 'Bu sağlayıcı desteklenmiyor.', 'PROVIDER_UNSUPPORTED'); }
+      if (!/^\/get\.php$/i.test(playlistUrl.pathname) && !/\.m3u8?$/i.test(playlistUrl.pathname)) return failure(400, 'Bu M3U adresi desteklenmiyor.', 'M3U_ACCOUNT_REQUIRED');
+      input = {server: playlistUrl.origin, username: playlistUrl.searchParams.get('username'), password: playlistUrl.searchParams.get('password')};
+      if (!input.username || !input.password) return failure(400, 'M3U hesap bilgileri okunamadı.', 'M3U_ACCOUNT_REQUIRED');
+    }
     let server;
-    try { server = allowed(input.server); } catch { return failure(400, 'Aracı bağlantı şu anda yalnızca trsmart.net için kullanılabilir.'); }
+    try { server = allowed(input.server); } catch { return failure(400, 'Aracı bağlantı şu anda yalnızca trsmart.net için kullanılabilir.', 'PROVIDER_UNSUPPORTED'); }
     if (server.pathname !== '/' || !input.username || !input.password ||
         typeof input.username !== 'string' || typeof input.password !== 'string' || input.username.length > 256 || input.password.length > 256) {
       return failure(400, 'Sunucu adresini ve hesap bilgilerini kontrol edin.');
@@ -117,10 +142,32 @@ export async function handleRequest(request, env) {
     const session = {id: crypto.randomUUID(), server: server.origin + '/', username: input.username, password: input.password, expires: Date.now() + TTL};
     try {
       const auth = await providerApi(session);
-      if (String(auth?.user_info?.auth) !== '1') return failure(401, 'Xtream hesabı doğrulanamadı.');
+      if (String(auth?.user_info?.auth) !== '1') return failure(401, 'Xtream hesabı doğrulanamadı.', 'ACCOUNT_INVALID');
       const token = await seal(session, key, `${url.origin}:session`);
-      return Response.json({ok: true}, {headers: {'Cache-Control': 'no-store', 'Set-Cookie': `${COOKIE}=${token}; Path=/api/iptv; Max-Age=7200; HttpOnly; Secure; SameSite=Strict`}});
-    } catch { return failure(502, 'Sağlayıcıya aracı bağlantı kurulamadı.'); }
+      const headers = {'Cache-Control': 'no-store', 'Set-Cookie': `${COOKIE}=${token}; Path=/api/iptv; Max-Age=7200; HttpOnly; Secure; SameSite=Strict`};
+      if (playlistUrl) {
+        const {response, url: finalUrl} = await upstream(playlistUrl);
+        if (!response.ok) { await response.body?.cancel(); throw new ProviderError('PROVIDER_HTTP_ERROR'); }
+        const parsed = parseM3U(await limitedText(response, 20 * 1024 * 1024), finalUrl);
+        const accountTag = encode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${session.username}\n${session.password}`))));
+        const channels = [];
+        for (const channel of parsed) {
+          let address;
+          try { address = allowed(channel.url); } catch { continue; }
+          const match = /^\/(?:(live|movie|series)\/)?([^/]+)\/([^/]+)\/(\d+)\.(m3u8|ts|mp4|mkv|webm|avi)$/i.exec(address.pathname);
+          if (!match || decodeURIComponent(match[2]) !== session.username || decodeURIComponent(match[3]) !== session.password) continue;
+          const kind = (match[1] || 'live').toLowerCase();
+          const extension = kind === 'live' ? 'm3u8' : match[5].toLowerCase();
+          channels.push({name: channel.name, group: channel.group, kind: kind === 'movie' ? 'movies' : kind,
+            hls: extension === 'm3u8', url: `${url.origin}/api/iptv/play/${kind}/${match[4]}.${extension}`,
+            favoriteKey: `${accountTag}:${kind}:${match[4]}`,
+            ...(channel.logo?.startsWith('https://') ? {logo: channel.logo} : {})});
+        }
+        if (!channels.length) return failure(400, 'Desteklenen yayın bulunamadı.', 'NO_STREAMS');
+        return Response.json({channels, skipped: parsed.length - channels.length}, {headers});
+      }
+      return Response.json({ok: true}, {headers});
+    } catch (error) { return failure(502, 'Sağlayıcıya aracı bağlantı kurulamadı.', error.code || 'PROVIDER_UNREACHABLE'); }
   }
   if (request.method !== 'GET') return failure(405, 'İstek yöntemi desteklenmiyor.');
   const token = request.headers.get('cookie')?.split(';').map(c => c.trim()).find(c => c.startsWith(`${COOKIE}=`))?.slice(COOKIE.length + 1);
@@ -137,26 +184,29 @@ export async function handleRequest(request, env) {
       for (const row of result) {
         if (action === 'get_live_categories') { output.push({category_id: row.category_id, category_name: row.category_name}); continue; }
         if (!/^\d+$/.test(String(row.stream_id))) continue;
-        const path = `live/${encodeURIComponent(session.username)}/${encodeURIComponent(session.password)}/${row.stream_id}.m3u8`;
         let logo = '';
         try {
           const image = new URL(row.stream_icon);
           if (image.protocol === 'https:') logo = image.href;
-          else if (image.hostname === HOST) logo = await mediaAddress(image, session, key, url.origin);
         } catch { /* Missing artwork. */ }
         output.push({stream_id: row.stream_id, category_id: row.category_id, name: row.name,
-          stream_icon: logo, relay_url: await mediaAddress(new URL(path, session.server), session, key, url.origin)});
+          stream_icon: logo, relay_url: `${url.origin}/api/iptv/live/${row.stream_id}.m3u8`});
       }
       return Response.json(output, {headers: {'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer'}});
     }
-    if (url.pathname === '/api/iptv/media') {
-      const target = await unseal(url.searchParams.get('t') || '', key, `${url.origin}:media`);
+    const live = /^\/api\/iptv\/live\/(\d+)\.m3u8$/.exec(url.pathname);
+    const play = /^\/api\/iptv\/play\/(live|movie|series)\/(\d+)\.(m3u8|mp4|mkv|webm|avi)$/.exec(url.pathname);
+    if (url.pathname === '/api/iptv/media' || live || play) {
+      const target = live || play ? {
+        url: new URL(`${play ? play[1] : 'live'}/${encodeURIComponent(session.username)}/${encodeURIComponent(session.password)}/${play ? play[2] : live[1]}.${play ? play[3] : 'm3u8'}`, session.server).href,
+        sessionId: session.id, expires: session.expires,
+      } : await unseal(url.searchParams.get('t') || '', key, `${url.origin}:media`);
       if (target.sessionId !== session.id) return failure(403, 'Bu yayına erişim izni yok.');
       const range = request.headers.get('range');
       const {response, url: finalUrl} = await upstream(target.url, range ? {Range: range} : {});
       if (!response.ok) { await response.body?.cancel(); return failure(502, 'Yayın sağlayıcısı yanıt vermedi.'); }
       const type = response.headers.get('content-type') || 'application/octet-stream';
-      if (/mpegurl/i.test(type) || /\.m3u8$/i.test(finalUrl.pathname)) {
+      if (/mpegurl/i.test(type) || /\.m3u8$/i.test(finalUrl.pathname) || /\.m3u8$/i.test(new URL(target.url).pathname)) {
         const raw = await limitedText(response, 2 * 1024 * 1024);
         if (!raw.trimStart().startsWith('#EXTM3U')) throw new Error('Not an HLS playlist');
         const playlist = await rewritePlaylist(raw, finalUrl, session, key, url.origin);
@@ -168,6 +218,6 @@ export async function handleRequest(request, env) {
       return new Response(response.body, {status: response.status, headers});
     }
     return failure(404, 'Bağlantı bulunamadı.');
-  } catch { return failure(502, 'Aracı bağlantı isteği tamamlanamadı.'); }
+  } catch (error) { return failure(502, 'Aracı bağlantı isteği tamamlanamadı.', error.code || 'RELAY_ERROR'); }
 }
 export default {fetch: handleRequest};

@@ -9,6 +9,59 @@ export function artworkUrl(value, base) {
   try { return webUrl(value, base).href; } catch { return ''; }
 }
 
+export const RELAY_MESSAGES = {
+  RELAY_NOT_CONFIGURED: 'HTTP bağlantı desteği için sunucu yapılandırması tamamlanmalı.',
+  RELAY_UNAVAILABLE: 'Aracı sunucuya ulaşılamadı. Bağlantını kontrol edip yeniden dene.',
+  RELAY_INVALID_RESPONSE: 'Aracı uç noktası beklenen yanıtı vermedi. Sayfayı yenileyin; sürerse Cloudflare Functions yapılandırmasını kontrol edin.',
+  PROVIDER_UNREACHABLE: 'Aracı sunucu sağlayıcıya bağlanamadı. Sağlayıcı erişimi engelliyor veya sunucu yanıt vermiyor olabilir.',
+  PROVIDER_TIMEOUT: 'Sağlayıcı isteği zaman aşımına uğradı. Yeniden deneyin.',
+  PROVIDER_HTTP_ERROR: 'Sağlayıcı aracı sunucudan gelen isteği reddetti.',
+  PROVIDER_INVALID_RESPONSE: 'Sağlayıcı IPTV verisi yerine farklı bir yanıt döndürdü. Adresi ve sağlayıcı erişimini kontrol edin.',
+  PROVIDER_REDIRECT: 'Sağlayıcı farklı bir sunucuya yönlendiriyor. Bu adres henüz aracı bağlantının izin listesinde yok.',
+  M3U_ACCOUNT_REQUIRED: 'Bu M3U kaynağından hesap bilgileri okunamadı. Aynı sağlayıcının Xtream girişini kullanın.',
+  PROVIDER_UNSUPPORTED: 'Aracı bağlantı şu anda yalnızca trsmart.net kaynaklarını destekliyor.',
+  ACCOUNT_INVALID: 'Xtream hesabı doğrulanamadı.',
+  NO_STREAMS: 'Listede aracı bağlantının desteklediği yayın bulunamadı.',
+  RELAY_ERROR: 'Aracı bağlantı isteği tamamlanamadı. Kaynağı yeniden yükleyin.',
+};
+
+async function relayCall(path, body, options = {}) {
+  const origin = globalThis.location?.origin || options.origin;
+  if (!origin?.startsWith('https://')) throw new Error('Aracı bağlantı yalnızca canlı HTTPS sitede kullanılabilir.');
+  let response;
+  try {
+    response = await (options.fetcher || fetch)(`${origin}/api/iptv/${path}`, {
+      method: body ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
+      referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(60000),
+      ...(body ? {headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {}),
+    });
+  } catch (error) {
+    throw new Error(error.name === 'TimeoutError' || error.name === 'AbortError' ? RELAY_MESSAGES.PROVIDER_TIMEOUT : RELAY_MESSAGES.RELAY_UNAVAILABLE);
+  }
+  let result;
+  try { result = await response.json(); }
+  catch { throw new Error(RELAY_MESSAGES.RELAY_INVALID_RESPONSE); }
+  if (!response.ok) throw new Error(RELAY_MESSAGES[result.code] || RELAY_MESSAGES.RELAY_ERROR);
+  return result;
+}
+
+async function prepareRelay(options) {
+  const status = await relayCall('status', null, options);
+  if (status.ready !== true) throw new Error(RELAY_MESSAGES.RELAY_NOT_CONFIGURED);
+}
+
+export async function loadM3uSource(source, options = {}) {
+  if (options.relay) {
+    await prepareRelay(options);
+    const result = await relayCall('playlist', typeof source === 'string' ? {url: source} : {channels: source.channels}, options);
+    if (!Array.isArray(result.channels) || !result.channels.length) throw new Error(RELAY_MESSAGES.NO_STREAMS);
+    return result.channels;
+  }
+  if (typeof source !== 'string') return source.channels;
+  const url = webUrl(source);
+  return parseM3U(await readRemote(url), url);
+}
+
 export function parseM3U(text, base) {
   if (/^#EXT-X-(?:TARGETDURATION|STREAM-INF|MEDIA-SEQUENCE):/m.test(text)) {
     if (!base) throw new Error('HLS dosyası yerine yayının HTTPS bağlantısını ekleyin.');
@@ -78,22 +131,8 @@ export async function loadXtream(server, username, password, reader = readRemote
   if (!root.pathname.endsWith('/')) root.pathname += '/';
   if (!username || !password) throw new Error('Kullanıcı adı ve şifre gerekli.');
   if (options.relay && root.protocol === 'http:') {
-    const origin = globalThis.location?.origin || options.origin;
-    if (!origin?.startsWith('https://')) throw new Error('Aracı bağlantı yalnızca canlı HTTPS sitede kullanılabilir.');
-    const fetcher = options.fetcher || fetch;
-    const call = async (path, body) => {
-      const response = await fetcher(`${origin}/api/iptv/${path}`, {
-        method: body ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
-        referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(30000),
-        ...(body ? {headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {}),
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        if (result.code === 'RELAY_NOT_CONFIGURED') throw new Error('HTTP bağlantı desteği için sunucu yapılandırması tamamlanmalı.');
-        throw new Error('Aracı bağlantı kurulamadı. Sunucu adresini ve hesap bilgilerini kontrol edin.');
-      }
-      return result;
-    };
+    await prepareRelay(options);
+    const call = (path, body) => relayCall(path, body, options);
     await call('open', {server: root.origin, username, password});
     const categories = await call('api?action=get_live_categories');
     const streams = await call('api?action=get_live_streams');

@@ -1,4 +1,4 @@
-import {webUrl, parseM3U, readRemote, loadXtream, filterChannels, contentType, channelCategory, sectionCategories, artworkUrl} from './core.js';
+import {webUrl, parseM3U, readRemote, loadXtream, loadM3uSource, RELAY_MESSAGES, filterChannels, contentType, channelCategory, sectionCategories, artworkUrl} from './core.js';
 import {saveSource, getSavedSource, deleteSavedSource} from './storage.js';
 
 const $ = id => document.getElementById(id);
@@ -33,7 +33,7 @@ function friendlyError(error) {
     'Aracı bağlantı yalnızca canlı HTTPS sitede kullanılabilir.',
     'Aracı bağlantı kurulamadı. Sunucu adresini ve hesap bilgilerini kontrol edin.',
   ];
-  return allowed.includes(error.message) ? error.message : 'Kaynak yüklenemedi. Adresi, bağlantını ve sağlayıcının HTTPS/CORS desteğini kontrol et.';
+  return allowed.includes(error.message) || Object.values(RELAY_MESSAGES).includes(error.message) ? error.message : 'Kaynak yüklenemedi. Bağlantı kullanıyorsan HTTP/CORS sorunları için aracı bağlantı seçeneğini deneyebilirsin.';
 }
 function openSource() { $('form-error').hidden = true; $('source-dialog').showModal(); }
 for (const id of ['add-source', 'start-source', 'list-source']) $(id).addEventListener('click', openSource);
@@ -46,6 +46,7 @@ document.querySelectorAll('[data-tab]').forEach(button => button.onclick = () =>
   state.mode = button.dataset.tab;
   document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-selected', String(b === button)));
   for (const tab of ['url', 'file', 'xtream']) $(`${tab}-fields`).hidden = state.mode !== tab;
+  $('relay-option').hidden = state.mode === 'file';
   $('form-error').hidden = true;
 });
 
@@ -92,9 +93,8 @@ $('source-form').addEventListener('submit', async e => {
     let channels, source;
     if (state.mode === 'url') {
       const url = webUrl($('playlist-url').value);
-      const text = await readRemote(url);
-      channels = parseM3U(text, url);
-      source = {mode: 'url', url: url.href};
+      source = {mode: 'url', url: url.href, relay: $('use-relay').checked};
+      channels = await loadM3uSource(url.href, {relay: source.relay});
     } else if (state.mode === 'file') {
       const file = $('playlist-file').files[0];
       if (!file) throw new Error('Önce bir M3U dosyası seçin.');
@@ -360,14 +360,14 @@ async function restoreSource() {
     if (!source || generation !== sourceGeneration) return;
     message('Kayıtlı kaynak yükleniyor…');
     let channels;
-    if (source.mode === 'url') channels = parseM3U(await readRemote(source.url), source.url);
+    if (source.mode === 'url') channels = await loadM3uSource(source.url, {relay: source.relay});
     else if (source.mode === 'xtream') channels = await loadXtream(source.server, source.username, source.password, undefined, {relay: source.relay});
     else channels = source.channels;
     if (generation !== sourceGeneration) return;
     await setChannels(channels, source.mode === 'xtream' ? 'Xtream Codes · Kayıtlı kaynak' : 'M3U · Kayıtlı kaynak', generation);
     if (generation === sourceGeneration) message('Kayıtlı kaynak yüklendi. İzlemek için bir içerik seç.');
-  } catch {
-    if (generation === sourceGeneration) message('Kayıtlı kaynak yüklenemedi veya bu tarayıcıda kayıt desteği yok. Kaynak ekle üzerinden yeniden deneyebilirsin.');
+  } catch (error) {
+    if (generation === sourceGeneration) message(`Kayıtlı kaynak yüklenemedi. ${friendlyError(error)}`);
   }
 }
 restoreSource();
