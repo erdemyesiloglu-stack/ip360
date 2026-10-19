@@ -130,7 +130,7 @@ export async function loadXtream(server, username, password, reader = readRemote
   root.search = ''; root.hash = '';
   if (!root.pathname.endsWith('/')) root.pathname += '/';
   if (!username || !password) throw new Error('Kullanıcı adı ve şifre gerekli.');
-  if (options.relay && root.protocol === 'http:') {
+  if (options.relay) {
     await prepareRelay(options);
     const call = (path, body) => relayCall(path, body, options);
     await call('open', {server: root.origin, username, password});

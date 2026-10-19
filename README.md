@@ -71,7 +71,7 @@ dosyalarını kontrol eder. Harici npm bağımlılığı veya frontend derleyici
 Yerel önizleme için Python 3 kuruluysa `npm start` ve `http://localhost:4173`.
 `npm run standalone` kurulum gerektirmeyen `akis-iptv.html` dosyasını üretir.
 
-31 parser, kategori, ağ okuma, şifreleme ve aracı bağlantı testi geçti (aracı testleri sahte sağlayıcı yanıtları kullanır). Gerçek sağlayıcı hesabı
+32 parser, kategori, ağ okuma, şifreleme ve aracı bağlantı testi geçti (aracı testleri sahte sağlayıcı yanıtları kullanır). Gerçek sağlayıcı hesabı
 ile oynatma ve gerçek Android/Windows tarayıcı testleri ayrıca yapılmalıdır.
 Bu depoya yüklenmiş olması, Pages projesinin henüz yayınlandığı anlamına gelmez.
 

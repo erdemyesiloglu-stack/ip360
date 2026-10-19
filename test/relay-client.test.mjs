@@ -42,3 +42,15 @@ test('Missing secret and HTML errors produce safe specific messages', async () =
   await assert.rejects(loadM3uSource('http://trsmart.net/get.php', {relay: true, origin: 'https://app.example.com',
     fetcher: async () => new Response('<html>upstream credentials must not appear</html>', {status: 500})}), {message: RELAY_MESSAGES.RELAY_INVALID_RESPONSE});
 });
+test('Relay also handles HTTPS Xtream providers with browser CORS restrictions', async () => {
+  const fetcher = async address => {
+    const url = new URL(address);
+    if (url.pathname.endsWith('/status')) return Response.json({ready: true});
+    if (url.pathname.endsWith('/open')) return Response.json({ok: true});
+    return Response.json(url.searchParams.get('action') === 'get_live_categories' ? [] :
+      [{stream_id: 42, name: 'Test', relay_url: 'https://app.example.com/api/iptv/live/42.m3u8'}]);
+  };
+  const result = await loadXtream('https://trsmart.net', 'u', 'p', async () => { throw new Error('Direct fetch must not be used'); },
+    {relay: true, origin: 'https://app.example.com', fetcher});
+  assert.equal(result[0].hls, true);
+});
