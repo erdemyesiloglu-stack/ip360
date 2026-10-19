@@ -35,7 +35,7 @@ Bu APK'lar Flutter'ın varsayılan geliştirme imzasını kullanır. Mağaza yay
 kalıcı güncellemeler için kullanıcıya ait sabit release imzası ayrıca gerekir.
 İlk hedef cihazlarda kurulabilen deneme APK'sıdır; Play Store'a gönderilmez.
 
-Yerelde Flutter 3.29.3, Android SDK ve JDK 17 ile:
+Yerelde Flutter 3.35.7, Android SDK ve JDK 17 ile:
 
 ```sh
 bash tool/prepare_android.sh /tmp/ip360-build

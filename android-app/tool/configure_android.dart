@@ -1,6 +1,11 @@
 import 'dart:io';
 
 void main() {
+  final gradle = File('android/app/build.gradle.kts');
+  var build = gradle.readAsStringSync();
+  build = build.replaceAll('compileSdk = flutter.compileSdkVersion', 'compileSdk = 36');
+  build = build.replaceAll('minSdk = flutter.minSdkVersion', 'minSdk = 23');
+  gradle.writeAsStringSync(build);
   final manifest = File('android/app/src/main/AndroidManifest.xml');
   var text = manifest.readAsStringSync();
   if (!text.contains('android.permission.INTERNET')) {
