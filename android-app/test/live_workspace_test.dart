@@ -7,7 +7,7 @@ import 'package:iptv_app/ui/live_workspace.dart';
 void main() {
   const channel = Channel('TRT 1', 'https://example.com/live', epgId: 'trt1');
   final now = DateTime(2026, 10, 20, 12, 10);
-  final programme = Programme('trt1', 'Öğle haberleri', DateTime(2026, 10, 20, 12), DateTime(2026, 10, 20, 13), 'Gündem');
+  final programme = Programme('trt1', 'Öğle haberleri', DateTime(2026, 10, 20, 11), DateTime(2026, 10, 20, 13), 'Gündem');
   for (final size in [const Size(360, 640), const Size(1280, 720)]) {
     for (final view in LiveView.values) {
       testWidgets('${view.name} fits ${size.width} and selects channels', (tester) async {

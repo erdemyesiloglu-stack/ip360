@@ -13,11 +13,11 @@ class Programme {
 }
 
 DateTime? xmltvTime(String value) {
-  final match = RegExp(r'^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?\s*([+-])(\d{2})(\d{2})$').firstMatch(value.trim());
+  final match = RegExp(r'^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\s*([+-])(\d{2})(\d{2}))?$').firstMatch(value.trim());
   if (match == null) { return null; }
   final utc = DateTime.utc(int.parse(match[1]!), int.parse(match[2]!), int.parse(match[3]!), int.parse(match[4]!), int.parse(match[5]!), int.parse(match[6] ?? '0'));
-  final offset = Duration(hours: int.parse(match[8]!), minutes: int.parse(match[9]!));
-  return (match[7] == '+' ? utc.subtract(offset) : utc.add(offset)).toLocal();
+  final offset = Duration(hours: int.parse(match[8] ?? '0'), minutes: int.parse(match[9] ?? '0'));
+  return (match[7] == '-' ? utc.add(offset) : utc.subtract(offset)).toLocal();
 }
 
 Map<String, List<Programme>> parseXmltv(String text) {

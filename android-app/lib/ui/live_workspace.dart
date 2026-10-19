@@ -71,8 +71,8 @@ class LiveWorkspace extends StatelessWidget {
       onTap: () => onSelect(channel))), Expanded(child: LayoutBuilder(builder: (context, box) => ClipRect(child: Stack(children: [
         const Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF2B3541)))))),
         if (programmes.isEmpty) Positioned.fill(child: TextButton(onPressed: onEpg, child: const Text('Program bilgisi yok', style: TextStyle(fontSize: 11, color: Colors.white38)))),
-        for (final p in programmes) Positioned(left: p.start.difference(_start).inSeconds / 5400 * box.maxWidth,
-          width: p.end.difference(p.start).inSeconds / 5400 * box.maxWidth, top: 3, bottom: 3,
+        for (final p in programmes) Positioned(left: (p.start.isBefore(_start) ? _start : p.start).difference(_start).inSeconds / 5400 * box.maxWidth,
+          width: (p.end.isAfter(end) ? end : p.end).difference(p.start.isBefore(_start) ? _start : p.start).inSeconds / 5400 * box.maxWidth, top: 3, bottom: 3,
           child: Padding(padding: const EdgeInsets.only(right: 2), child: Material(color: p.contains(now) ? const Color(0xFF244540) : const Color(0xFF202A35),
             child: InkWell(onTap: () => showDialog<void>(context: context, builder: (context) => AlertDialog(title: Text(p.title),
               content: SingleChildScrollView(child: Text('${channel.name} · ${programmeTime(p.start)}–${programmeTime(p.end)}\n\n${p.description.isEmpty ? 'Açıklama bulunmuyor.' : p.description}')),

@@ -7,6 +7,7 @@ void main() {
     expect(xmltvTime('20261020120000 +0300')!.toUtc(), DateTime.utc(2026, 10, 20, 9));
     expect(xmltvTime('20261020040000 -0500')!.toUtc(), DateTime.utc(2026, 10, 20, 9));
     expect(xmltvTime('202610201200'), isNull);
+    expect(xmltvTime('20261020090000')!.toUtc(), DateTime.utc(2026, 10, 20, 9));
   });
   test('Guide sorts programmes, decodes text and skips invalid intervals', () {
     final guide = parseXmltv('<tv>'
