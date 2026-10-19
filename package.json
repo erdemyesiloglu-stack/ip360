@@ -1,0 +1,14 @@
+{
+  "name": "ip360",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "M3U ve Xtream Codes destekli Akış IPTV web oynatıcı",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "build": "npm test && node scripts/check-site.mjs",
+    "start": "python -m http.server 4173 --directory dist",
+    "standalone": "node build-standalone.mjs"
+  },
+  "engines": {"node": ">=20"}
+}

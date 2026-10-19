@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#10151c"><meta name="referrer" content="no-referrer">
+  <meta name="description" content="M3U ve Xtream Codes kaynaklarınızı tarayıcınızda izleyin. Akış IPTV: kişisel yayın oynatıcınız.">
+  <title>Akış — IPTV oynatıcı</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <aside class="rail" aria-label="Ana menü">
+    <a class="brand" href="./" aria-label="Akış ana sayfa"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M9 8h9l-7 24H2zM23 8h9l-7 24h-9z" fill="currentColor"/></svg><span>akış</span></a>
+    <p class="rail-label">KÜTÜPHANE</p>
+    <nav aria-label="İçerik bölümleri">
+      <button class="rail-active" id="all-nav" aria-controls="live-categories" aria-expanded="false" data-section="live" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="m8 2 4 4 4-4M8 22h8m-5-12 5 3-5 3z"/></svg><span>Kanallar</span><svg class="menu-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+      <div class="sub-categories" id="live-categories" aria-label="Alt kategoriler" hidden></div>
+      <button id="movies-nav" aria-controls="movies-categories" aria-expanded="false" data-section="movies"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4m-11-7 5 3-5 3z"/></svg><span>Filmler</span><svg class="menu-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+      <div class="sub-categories" id="movies-categories" aria-label="Alt kategoriler" hidden></div>
+      <button id="series-nav" aria-controls="series-categories" aria-expanded="false" data-section="series"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="13" rx="3"/><path d="M5 5h14M8 2h8m-6 10 5 3-5 3z"/></svg><span>Diziler</span><svg class="menu-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+      <div class="sub-categories" id="series-categories" aria-label="Alt kategoriler" hidden></div>
+    </nav>
+    <div class="rail-divider"></div>
+    <button id="fav-nav" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/></svg><span>Favoriler</span></button>
+    <span class="rail-bottom">A</span>
+  </aside>
+  <div class="workspace">
+    <header><div class="wordmark">akış<span>IPTV</span></div><span class="header-note">Senin ekranın. Senin akışın.</span><div class="header-actions"><button class="quiet" id="install" hidden>Uygulamayı kur ↗</button><button class="primary" id="add-source"><span>＋</span> Kaynak ekle</button></div></header>
+    <main>
+      <div class="page-heading"><div><p class="eyebrow">KİŞİSEL YAYIN ALANIN</p><h1 id="page-title">İyi seyirler.</h1><p class="muted" id="page-subtitle">Sevdiğin yayınlar, tek bir ekranda.</p></div><span class="privacy-dot">Cihazından doğrudan bağlantı</span></div>
+      <button class="quiet back-catalog" id="back-catalog" hidden>← Kataloğa dön</button>
+      <p id="message" class="message" role="status" aria-live="polite" hidden></p>
+      <div class="dashboard" id="dashboard">
+        <section class="watch-area" aria-label="Yayın oynatıcı">
+          <div class="screen" id="screen"><video id="video" controls playsinline preload="none" crossorigin="anonymous" referrerpolicy="no-referrer" hidden></video>
+            <div class="welcome" id="welcome"><div class="signal"><span></span><span></span><span></span><span></span></div><p class="eyebrow">İZLEMEYE HAZIRSIN</p><h2>Bir kanal seç.<br>Akışa katıl.</h2><p>M3U listeni ekle veya Xtream hesabınla bağlan.</p><button class="primary" id="start-source">＋ İlk kaynağını ekle</button><button class="text-button" id="demo">Önce demo yayını dene <span>↗</span></button></div>
+          </div>
+          <div class="now-playing"><div class="channel-symbol" id="current-symbol">▶</div><div><p class="eyebrow" id="current-group">AKIŞ OYNATICI</p><h2 id="current-name">Henüz bir kanal seçilmedi</h2></div><button class="quiet" id="retry" hidden>Yeniden dene ↻</button><span class="status-pill" id="play-state">HAZIR</span></div>
+          <div class="info-grid"><article><span class="mini-icon">↗</span><h3>Listen sende kalsın</h3><p>Kaynağını bu cihazda hatırla; yeniden açtığında hazır olsun.</p></article><article><span class="mini-icon">▣</span><h3>Her ekranda Akış</h3><p>Android veya Windows. Tarayıcını aç, kaldığın keyfe devam et.</p></article></div>
+          <div class="compat-note"><span>ⓘ</span><p>Akış yayın içermez. HTTPS ve tarayıcı erişimini destekleyen kendi kaynağını ekle. <button id="help-open">Uyumluluk hakkında</button></p></div>
+        </section>
+        <section class="channel-panel" aria-label="Kanal listesi"><div class="panel-heading"><h2><span id="section-title">Kanallar</span> <span id="channel-count">0</span></h2><button id="clear" class="quiet" hidden>Kaynağı sil</button></div><div class="source-meta" id="source-meta">Henüz kaynak eklenmedi</div><label class="search"><span>⌕</span><input type="search" id="search" placeholder="Kanal ara…" aria-label="Kanal ara"><kbd> / </kbd></label><div class="filters"><button id="all-filter" class="filter active">Tümü</button><button id="fav-filter" class="filter">☆ Favoriler</button><label class="sr-only" for="category">Kategori</label><select id="category"><option value="">Tüm kategoriler</option></select></div><div class="channel-list" id="channel-list"><div class="empty-list"><span>▤</span><h3>Listen burada görünecek</h3><p>Bir kaynak eklediğinde kanallarını<br>buradan keşfedebilirsin.</p><button class="text-button" id="list-source">Kaynak ekle ↗</button></div></div><div class="panel-footer"><span class="green-dot"></span><span id="list-footer">M3U & Xtream Codes desteği</span></div></section>
+      </div>
+      <footer><span>akış <small>Güzel yayınların buluşma noktası.</small></span><button id="privacy-open">Gizlilik ve kullanım</button><span class="version">WEB OYNATICI · v0.1</span></footer>
+    </main>
+  </div>
+  <dialog id="source-dialog"><div class="dialog-head"><div><p class="eyebrow">YAYIN KAYNAĞI</p><h2>Akışını ekle</h2></div><button class="close" id="close-source" aria-label="Kapat">×</button></div><div class="tabs" role="tablist" aria-label="Kaynak türü"><button role="tab" aria-selected="true" data-tab="url">M3U bağlantısı</button><button role="tab" aria-selected="false" data-tab="file">Dosya</button><button role="tab" aria-selected="false" data-tab="xtream">Xtream Codes</button></div>
+    <form id="source-form"><div id="url-fields"><label for="playlist-url">M3U / M3U8 bağlantısı</label><input id="playlist-url" type="url" placeholder="https://ornek.com/kanallar.m3u" autocomplete="off"><p class="field-note">Sağlayıcının CORS erişimine izin vermesi gerekir.</p></div><div id="file-fields" hidden><label class="file-drop" for="playlist-file"><span>↥</span><strong>M3U dosyanı seç</strong><small>.m3u veya .m3u8 · En fazla 20 MB</small><input id="playlist-file" type="file" accept=".m3u,.m3u8"></label></div><div id="xtream-fields" hidden><label for="server">Sunucu adresi</label><input id="server" type="url" placeholder="https://sunucu.com:443" autocomplete="off"><div class="input-row"><div><label for="username">Kullanıcı adı</label><input id="username" autocomplete="off" spellcheck="false"></div><div><label for="password">Şifre</label><input id="password" type="password" autocomplete="off"></div></div><p class="field-note">Canlı kanallar HLS biçiminde yüklenir. Hesabın bu biçimi desteklemeli.</p></div><p class="form-error" id="form-error" role="alert" hidden></p><label class="remember-option"><input type="checkbox" id="remember-source" checked><span>Kaynağı bu cihazda hatırla<small>Bu tarayıcıyı kullanan kişiler de kaynağa erişebilir.</small></span></label><button type="submit" class="primary submit" id="submit-source">Kanalları yükle →</button><p class="secure-note">⌁ Kayıt bu tarayıcıda şifreli saklanır; sunucuya kaydedilmez.</p></form>
+  </dialog>
+  <dialog id="help-dialog"><div class="dialog-head"><h2>Tarayıcıda izleme</h2><button class="close" id="close-help" aria-label="Kapat">×</button></div><div class="help-content"><h3>Desteklenen yayınlar</h3><p>HLS (.m3u8) ve tarayıcının desteklediği MP4/WebM yayınları oynatılır. Xtream canlı kanallar için HLS adresi kullanılır. Ham TS, DRM ve bazı ses/video kodekleri desteklenmeyebilir.</p><h3>Bağlantı açılmıyorsa</h3><p>Bu HTTPS sayfası, HTTP kaynaklarına erişemez. Sağlayıcının hem kanal listesinde hem yayın dosyalarında CORS izni vermesi gerekir. Bu sürümde aracı sunucu ve yayın dönüştürme bulunmuyor.</p><h3>Gizlilik</h3><p>“Kaynağı bu cihazda hatırla” seçiliyse son kaynak, hesap bilgileri veya dosyadan eklenen liste bu tarayıcının yerel veritabanında şifreli saklanır. Anahtar da bu tarayıcıdadır; aynı tarayıcıya erişebilen kişiler kaynağı kullanabilir. Seçenek kapalıysa yeni kaynak yalnızca oturumda tutulur. Tarayıcı verilerinin silinmesi kaydı da siler. Dosyalı sürümde kaydın korunması tarayıcıya ve dosyanın aynı konumdan açılmasına bağlıdır. Favori seçimlerinin yalnızca tek yönlü özetleri bu tarayıcıda saklanır. Aynı listeyi yeniden yüklediğinde favoriler eşleşir. Oynatma sırasında sağlayıcın IP adresini ve hesap bilgilerini alır. Akış analitik veya reklam aracı kullanmaz. HLS oynatma gerektiğinde jsDelivr üzerinden HLS.js kütüphanesi yüklenir; CDN bağlantı bilgilerini alır.</p><h3>Kullanım</h3><p>Uygulama kanal veya abonelik sağlamaz. Kullanmaya yetkili olduğun yayınları ekle. Demo, herkese açık bir test yayınıdır. Tam ekran için oynatıcının tam ekran düğmesini kullanabilirsin.</p><button class="quiet" id="forget-source">Bu cihazdaki kaynak kaydını sil</button><br><button class="quiet" id="forget">Bu cihazdaki favorileri sil</button></div></dialog>
+</body></html>
