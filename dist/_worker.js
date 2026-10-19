@@ -3,6 +3,7 @@ import {parseM3U} from './core.js';
 const COOKIE = 'ip360_relay';
 const TTL = 2 * 60 * 60 * 1000;
 const HOST = 'trsmart.net';
+const EXTRA_ORIGINS = new Set(['https://iptv.tjurkx.com:8000']);
 class ProviderError extends Error {
   constructor(code) { super(code); this.code = code; }
 }
@@ -12,8 +13,8 @@ function failure(status, message, code = 'RELAY_ERROR') {
 }
 function allowed(value) {
   const url = new URL(value);
-  if (url.hostname !== HOST || url.username || url.password || !['http:', 'https:'].includes(url.protocol) ||
-      !['', '80', '443', '8080', '8443'].includes(url.port)) throw new Error('Forbidden upstream');
+  const legacy = url.hostname === HOST && ['', '80', '443', '8080', '8443'].includes(url.port);
+  if ((!legacy && !EXTRA_ORIGINS.has(url.origin)) || url.username || url.password || !['http:', 'https:'].includes(url.protocol)) throw new Error('Forbidden upstream');
   return url;
 }
 function encode(bytes) { return btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, ''); }
@@ -109,7 +110,7 @@ export async function handleRequest(request, env) {
   if (request.headers.get('sec-fetch-site') === 'cross-site') return failure(403, 'Bu bağlantıya izin verilmedi.');
   if (url.pathname === '/api/iptv/status') {
     if (request.method !== 'GET') return failure(405, 'İstek yöntemi desteklenmiyor.');
-    return Response.json({ready: typeof env.IPTV_SESSION_SECRET === 'string' && env.IPTV_SESSION_SECRET.length >= 32, revision: 2},
+    return Response.json({ready: typeof env.IPTV_SESSION_SECRET === 'string' && env.IPTV_SESSION_SECRET.length >= 32, revision: 3},
       {headers: {'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer'}});
   }
   if (url.pathname === '/api/iptv/close') {
@@ -134,7 +135,7 @@ export async function handleRequest(request, env) {
       if (!input.username || !input.password) return failure(400, 'M3U hesap bilgileri okunamadı.', 'M3U_ACCOUNT_REQUIRED');
     }
     let server;
-    try { server = allowed(input.server); } catch { return failure(400, 'Aracı bağlantı şu anda yalnızca trsmart.net için kullanılabilir.', 'PROVIDER_UNSUPPORTED'); }
+    try { server = allowed(input.server); } catch { return failure(400, 'Sunucu aracı bağlantının izin listesinde değil.', 'PROVIDER_UNSUPPORTED'); }
     if (server.pathname !== '/' || !input.username || !input.password ||
         typeof input.username !== 'string' || typeof input.password !== 'string' || input.username.length > 256 || input.password.length > 256) {
       return failure(400, 'Sunucu adresini ve hesap bilgilerini kontrol edin.');

@@ -19,7 +19,7 @@ export const RELAY_MESSAGES = {
   PROVIDER_INVALID_RESPONSE: 'Sağlayıcı IPTV verisi yerine farklı bir yanıt döndürdü. Adresi ve sağlayıcı erişimini kontrol edin.',
   PROVIDER_REDIRECT: 'Sağlayıcı farklı bir sunucuya yönlendiriyor. Bu adres henüz aracı bağlantının izin listesinde yok.',
   M3U_ACCOUNT_REQUIRED: 'Bu M3U kaynağından hesap bilgileri okunamadı. Aynı sağlayıcının Xtream girişini kullanın.',
-  PROVIDER_UNSUPPORTED: 'Aracı bağlantı şu anda yalnızca trsmart.net kaynaklarını destekliyor.',
+  PROVIDER_UNSUPPORTED: 'Bu sunucu veya port aracı bağlantının izin listesinde yok.',
   ACCOUNT_INVALID: 'Xtream hesabı doğrulanamadı.',
   NO_STREAMS: 'Listede aracı bağlantının desteklediği yayın bulunamadı.',
   RELAY_ERROR: 'Aracı bağlantı isteği tamamlanamadı. Kaynağı yeniden yükleyin.',

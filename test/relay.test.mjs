@@ -131,3 +131,35 @@ test('Provider response format failures are returned as diagnostic codes without
     assert.ok(!JSON.stringify(result).includes('sensitive'));
   } finally { globalThis.fetch = original; }
 });
+test('New HTTPS provider preserves port 8000 for M3U and playback', async () => {
+  const original = globalThis.fetch;
+  const server = 'https://iptv.tjurkx.com:8000';
+  globalThis.fetch = async address => {
+    const target = new URL(address);
+    assert.equal(target.origin, server);
+    assert.equal(target.port, '8000');
+    if (target.pathname === '/player_api.php') return Response.json({user_info: {auth: 1}});
+    if (target.pathname === '/get.php') return new Response(`#EXTM3U\n#EXTINF:-1 group-title="Ulusal",Kanal\n${server}/live/test-user/test-password/42.m3u8`);
+    if (target.pathname.endsWith('.m3u8')) return new Response('#EXTM3U\n#EXTINF:6,\nsegment.ts');
+    throw new Error('Unexpected upstream request');
+  };
+  try {
+    const response = await handleRequest(new Request(origin + '/api/iptv/playlist', {
+      method: 'POST', headers: {'Content-Type': 'application/json', Origin: origin},
+      body: JSON.stringify({url: `${server}/get.php?username=test-user&password=test-password`}),
+    }), env);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    const cookie = response.headers.get('set-cookie').split(';')[0];
+    const media = await handleRequest(authenticated(result.channels[0].url, cookie), env);
+    assert.equal(media.status, 200);
+    assert.match(await media.text(), /\/api\/iptv\/media\?t=/);
+  } finally { globalThis.fetch = original; }
+});
+test('New provider rejects different ports, downgrades and lookalike hosts', async () => {
+  for (const server of ['https://iptv.tjurkx.com', 'http://iptv.tjurkx.com:8000', 'https://iptv.tjurkx.com:9000', 'https://iptv.tjurkx.com.evil.example:8000']) {
+    const response = await handleRequest(openRequest(server), env);
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).code, 'PROVIDER_UNSUPPORTED');
+  }
+});

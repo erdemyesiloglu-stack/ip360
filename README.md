@@ -71,15 +71,15 @@ dosyalarını kontrol eder. Harici npm bağımlılığı veya frontend derleyici
 Yerel önizleme için Python 3 kuruluysa `npm start` ve `http://localhost:4173`.
 `npm run standalone` kurulum gerektirmeyen `akis-iptv.html` dosyasını üretir.
 
-32 parser, kategori, ağ okuma, şifreleme ve aracı bağlantı testi geçti (aracı testleri sahte sağlayıcı yanıtları kullanır). Gerçek sağlayıcı hesabı
+34 parser, kategori, ağ okuma, şifreleme ve aracı bağlantı testi geçti (aracı testleri sahte sağlayıcı yanıtları kullanır). Gerçek sağlayıcı hesabı
 ile oynatma ve gerçek Android/Windows tarayıcı testleri ayrıca yapılmalıdır.
 Bu depoya yüklenmiş olması, Pages projesinin henüz yayınlandığı anlamına gelmez.
 
 
 ## HTTP/CORS aracı bağlantısı (trsmart.net)
 
-HTTPS sayfa HTTP sağlayıcıya doğrudan bağlanamaz. Bu depo, yalnızca
-`trsmart.net` için bir HTTPS aracı içerir. Genel amaçlı URL proxy'si değildir.
+HTTPS sayfa HTTP sağlayıcıya doğrudan bağlanamaz. Bu depo, `trsmart.net` ve
+`https://iptv.tjurkx.com:8000` için bir HTTPS aracı içerir. Genel amaçlı URL proxy'si değildir.
 
 **Cloudflare'da bir kez etkinleştirme:**
 
@@ -111,7 +111,7 @@ uçtan uca oynatma henüz doğrulanmadı. Sunucu sırrı eklenene kadar uç nokt
 
 ### M3U bağlantısı ve tanılama
 
-Aracı seçeneği M3U bağlantısında da kullanılabilir. Şu an trsmart.net üzerindeki
+Aracı seçeneği M3U bağlantısında da kullanılabilir. İzin verilen sunuculardaki
 `get.php?username=…&password=…` biçimi veya aynı hesap parametrelerini içeren
 `.m3u` / `.m3u8` bağlantıları desteklenir. Parametreler HTTPS POST gövdesinde
 aracıya gönderilir, aracı hesap doğrulaması yapar. Standart live/movie/series
@@ -126,3 +126,5 @@ sağlayıcı reddi, zaman aşımı, farklı sunucu yönlendirmesi ve HTML hata s
 ayrı güvenli mesajlarla gösterir. Büyük kataloglarda her kanal için ayrı token
 şifreleme yapılmaz; oturum kimliği çerezde doğrulanır. Aracıdaki HTTP görseller
 şimdilik atlanır, HTTPS görseller ve yer tutucular kullanılır.
+
+Yeni sağlayıcı `https://iptv.tjurkx.com:8000` tam HTTPS origin olarak izin listesine eklenmiştir. Başka port veya HTTP protokolüne otomatik geçilmez. Wrangler Pages yapılandırması `allow_custom_ports` uyumluluk bayrağıyla 8000 portunu korur. HTTPS sertifika doğrulaması kapatılmaz. Gerçek sağlayıcı erişimi hesap olmadan doğrulanmamıştır.
